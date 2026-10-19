@@ -1,0 +1,1427 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pools &amp; Fluxes</title>
+<!-- pools_and_fluxes.html · v1.4 · 2026-10-19
+     Stock-and-flow (Stella-style) ODE builder for an ecosystem ecology class.
+     One self-contained page: diagram editor, equation parser, Euler/RK4 solver, graph, table.
+     CHANGED v1.4: results hidden until Run (and again after any edit) so students predict first; rerun-on-edit off by default.
+     CHANGED v1.3: Copy model / Copy graph (picture with legend); paste a model to open it; leaf example 20 mg mineral N, Vmax 0.15.
+     CHANGED v1.2: leaf example uses explicit gross mineralization/immobilization per bite; legend one row per group, constants last.
+     CHANGED v1.1: leaf C+N decomposition example; parallel fluxes between two pools drawn side by side. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a modelling bench. Tool rail | diagram on graph paper | inspector; run controls and results below. */
+:root{
+  --paper:#eef2f1; --panel:#fbfcfc; --ink:#1b2629; --muted:#5b6a6d; --rule:#cbd6d5; --grid:#dde5e4;
+  --stock:#2c6b6f; --stock-fill:#d9ebe9; --flow:#1f5b88; --aux:#a8691f; --link:#b03a3a;
+  --sel:#d99a00; --err:#b3261e; --accent:#1f5b88; --accent-ink:#ffffff;
+  --s1:#1f5b88; --s2:#c0562b; --s3:#2e8540; --s4:#8a3fa0; --s5:#b8860b; --s6:#0f8a8a; --s7:#c2307a; --s8:#5a6b2a;
+  --ui:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#11191b; --panel:#172124; --ink:#e2ebeb; --muted:#93a4a6; --rule:#2b3a3d; --grid:#1a2629;
+  --stock:#74b9bc; --stock-fill:#1d3537; --flow:#72aede; --aux:#e2a65c; --link:#e48080;
+  --sel:#ffcb3d; --err:#ff8a80; --accent:#72aede; --accent-ink:#0d1517;
+  --s1:#72aede; --s2:#f08a5d; --s3:#6fcf7f; --s4:#c58ce0; --s5:#e8c25a; --s6:#5fd0cf; --s7:#f07ab3; --s8:#b5c86a;
+  color-scheme:dark }}
+:root[data-theme="dark"]{
+  --paper:#11191b; --panel:#172124; --ink:#e2ebeb; --muted:#93a4a6; --rule:#2b3a3d; --grid:#1a2629;
+  --stock:#74b9bc; --stock-fill:#1d3537; --flow:#72aede; --aux:#e2a65c; --link:#e48080;
+  --sel:#ffcb3d; --err:#ff8a80; --accent:#72aede; --accent-ink:#0d1517;
+  --s1:#72aede; --s2:#f08a5d; --s3:#6fcf7f; --s4:#c58ce0; --s5:#e8c25a; --s6:#5fd0cf; --s7:#f07ab3; --s8:#b5c86a;
+  color-scheme:dark }
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--paper);color:var(--ink);font-family:var(--ui);font-size:15px;line-height:1.4;margin:0}
+.page{padding-inline:16px;padding-block:12px 28px;max-width:1500px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:5px 11px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--sel);outline-offset:1px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:700}
+select,input[type=text],input[type=number],textarea{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:5px 8px}
+label{color:var(--muted)}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand h1{font-size:22px;margin:0;letter-spacing:.01em}
+.brand svg{width:34px;height:34px}
+.mname{flex:1 1 200px;min-width:0;font-weight:700;font-size:16px;background:transparent!important;border-color:transparent!important}
+.mname:hover{border-color:var(--rule)!important}
+.filebtns{display:flex;flex-wrap:wrap;gap:6px}
+.confirm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--sel);border-radius:8px;padding:8px 12px}
+
+/* bench */
+.bench{display:grid;grid-template-columns:auto minmax(0,1fr) 330px;gap:10px;height:560px}
+.tools{display:flex;flex-direction:column;gap:6px}
+.tool{display:flex;flex-direction:column;align-items:center;gap:2px;width:78px;padding:7px 4px;font-size:12px;line-height:1.1}
+.tool svg{width:30px;height:24px}
+.tool kbd{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.tool[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
+.diawrap{position:relative;border:1px solid var(--rule);border-radius:8px;overflow:auto;background-color:var(--panel);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:20px 20px;background-attachment:local}
+#dia{display:block;touch-action:none;user-select:none;-webkit-user-select:none}
+.hint{position:sticky;left:8px;bottom:8px;display:inline-block;margin:-36px 0 8px 8px;padding:4px 10px;border-radius:6px;background:var(--ink);color:var(--paper);font-size:13px;pointer-events:none;max-width:calc(100% - 16px)}
+.insp{border:1px solid var(--rule);border-radius:8px;background:var(--panel);padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:10px;min-width:0}
+.insp h2{margin:0;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:flex;align-items:center;gap:8px}
+.insp .sw{width:14px;height:14px;border-radius:3px;display:inline-block}
+.field{display:flex;flex-direction:column;gap:3px}
+.field label{font-size:13px}
+.field textarea{font-family:var(--mono);font-size:14px;min-height:62px;resize:vertical}
+.field input[type=text]{width:100%}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{font-family:var(--mono);font-size:12.5px;padding:2px 8px;border-radius:12px}
+.ode{font-family:var(--mono);font-size:13px;background:var(--paper);border-radius:6px;padding:7px 9px;overflow-x:auto;white-space:pre}
+.err{color:var(--err);font-size:13.5px}
+.note{color:var(--muted);font-size:13px}
+.insp ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.slider{display:grid;grid-template-columns:64px 1fr 64px;gap:6px;align-items:center}
+.slider input[type=number]{width:100%;font-size:12px;padding:3px 4px}
+.danger{color:var(--err)}
+
+/* run bar */
+.runbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:8px 12px}
+.runbar label{display:flex;align-items:center;gap:5px;font-size:13.5px}
+.runbar input[type=number]{width:82px;font-family:var(--mono);font-size:13.5px}
+.status{flex:1 1 260px;min-width:0;font-size:13.5px;color:var(--muted)}
+.status button{padding:1px 7px;font-size:13px;margin:2px 4px 2px 0;border-color:var(--err);color:var(--err)}
+
+/* results */
+.results{background:var(--panel);border:1px solid var(--rule);border-radius:8px;padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tab[aria-selected="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.spacer{flex:1}
+.legend{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:3px 14px;align-items:start;font-size:13.5px}
+.legend .grp{color:var(--muted);font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;padding-top:5px}
+.lgrow{display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center;min-width:0}
+.lg{display:flex;align-items:center;gap:6px;padding:2px 8px 2px 4px;border-radius:5px;border:1px solid transparent;background:none}
+.lg .sw{width:22px;height:4px;border-radius:2px}
+.lg[aria-pressed="false"]{opacity:.45}
+.lg[aria-pressed="false"] .sw{background:var(--rule)!important}
+.lg small{color:var(--muted)}
+#plot{width:100%;height:360px;display:block}
+.tablewrap{max-height:400px;overflow:auto;border:1px solid var(--rule);border-radius:6px}
+table{border-collapse:collapse;font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;width:max-content;min-width:100%}
+th,td{padding:3px 10px;text-align:right;border-bottom:1px solid var(--grid)}
+th{position:sticky;top:0;background:var(--panel);font-family:var(--ui);font-size:13px;border-bottom:1px solid var(--rule)}
+.eqs{font-family:var(--mono);font-size:13.5px;line-height:1.6;white-space:pre-wrap;margin:0;max-height:420px;overflow:auto}
+
+/* help overlay */
+.overlay{position:fixed;inset:0;background:color-mix(in srgb,var(--ink) 45%,transparent);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:10}
+.helpcard{background:var(--panel);border-radius:10px;max-width:760px;padding:20px 24px;display:flex;flex-direction:column;gap:10px;line-height:1.5}
+.helpcard h2{margin:0;font-size:20px}
+.helpcard h3{margin:6px 0 0;font-size:16px}
+.helpcard p,.helpcard ul{margin:0}
+.helpcard code{font-family:var(--mono);font-size:13.5px;background:var(--paper);padding:0 4px;border-radius:4px}
+
+/* diagram classes */
+.st rect{fill:var(--stock-fill);stroke:var(--stock);stroke-width:2}
+.st text{fill:var(--ink)}
+.pipe-o{stroke:var(--flow);stroke-width:10;fill:none;stroke-linecap:butt}
+.pipe-i{stroke:var(--panel);stroke-width:5;fill:none}
+.fl .head{fill:var(--flow)}
+.valve{fill:var(--panel);stroke:var(--flow);stroke-width:2}
+.bow{fill:var(--flow)}
+.cloud{fill:var(--panel);stroke:var(--muted);stroke-width:1.5}
+.ax circle{fill:var(--panel);stroke:var(--aux);stroke-width:2}
+.lk path{stroke:var(--link);stroke-width:1.6;fill:none}
+.lk .hit{stroke:transparent;stroke-width:12}
+.lk polygon{fill:var(--link)}
+.lbl{fill:var(--ink);font-size:13px;font-family:var(--ui)}
+.halo{paint-order:stroke;stroke:var(--panel);stroke-width:4px;stroke-linejoin:round}
+.sub{fill:var(--muted);font-size:11px;font-family:var(--mono)}
+.sel rect,.sel circle.main,.sel .valve{stroke:var(--sel);stroke-width:3.5}
+.lk.sel path:not(.hit){stroke:var(--sel);stroke-width:2.6}
+.bad rect,.bad circle.main,.bad .valve{stroke:var(--err);stroke-dasharray:5 3}
+.temp{stroke:var(--muted);stroke-width:2;stroke-dasharray:6 4;fill:none;pointer-events:none}
+[data-id]{cursor:pointer}
+
+@media (max-width:900px){
+  .bench{grid-template-columns:minmax(0,1fr);height:auto}
+  .tools{flex-direction:row;flex-wrap:wrap}
+  .tool{width:auto;flex-direction:row;gap:6px;padding:6px 10px}
+  .diawrap{height:420px}
+  .insp{max-height:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 34 34" aria-hidden="true"><rect x="3" y="9" width="16" height="16" rx="2" fill="var(--stock-fill)" stroke="var(--stock)" stroke-width="2"/><path d="M19 17h12" stroke="var(--flow)" stroke-width="5"/><path d="M19 17h12" stroke="var(--panel)" stroke-width="2"/><circle cx="25" cy="17" r="4" fill="var(--panel)" stroke="var(--flow)" stroke-width="1.5"/></svg>
+      <h1>Pools &amp; Fluxes</h1>
+    </div>
+    <input id="modelName" class="mname" type="text" aria-label="Model name">
+    <div class="filebtns">
+      <select id="examples" aria-label="Load an example model">
+        <option value="">Examples…</option>
+        <option value="soil">Soil carbon: one pool</option>
+        <option value="plantsoil">Plant and soil carbon</option>
+        <option value="lv">Hares and lynx (predator–prey)</option>
+        <option value="leaf">Leaf decomposition: carbon and nitrogen</option>
+      </select>
+      <button id="newBtn">New</button>
+      <button id="openBtn">Open…</button>
+      <input id="fileIn" type="file" accept=".json,application/json" hidden>
+      <button id="saveBtn">Save</button>
+      <button id="copyModel" title="Copy the model as text; paste it on this page to open it again">Copy model</button>
+      <button id="helpBtn">How it works</button>
+    </div>
+  </header>
+  <div id="confirmBar" class="confirm" hidden></div>
+
+  <section class="bench">
+    <div class="tools" role="toolbar" aria-label="Diagram tools">
+      <button class="tool" data-tool="select" aria-pressed="true"><svg viewBox="0 0 30 24"><path d="M10 3l12 9-6 1 3 7-3 1-3-7-4 4z" fill="var(--ink)"/></svg>Select<kbd>V</kbd></button>
+      <button class="tool" data-tool="stock" aria-pressed="false"><svg viewBox="0 0 30 24"><rect x="4" y="4" width="22" height="16" rx="2" fill="var(--stock-fill)" stroke="var(--stock)" stroke-width="2"/></svg>Pool<kbd>P</kbd></button>
+      <button class="tool" data-tool="flow" aria-pressed="false"><svg viewBox="0 0 30 24"><path d="M2 12h22" stroke="var(--flow)" stroke-width="7"/><path d="M2 12h22" stroke="var(--panel)" stroke-width="3"/><path d="M23 6l6 6-6 6z" fill="var(--flow)"/><circle cx="13" cy="12" r="4.5" fill="var(--panel)" stroke="var(--flow)" stroke-width="1.5"/></svg>Flux<kbd>F</kbd></button>
+      <button class="tool" data-tool="aux" aria-pressed="false"><svg viewBox="0 0 30 24"><circle cx="15" cy="12" r="8" fill="var(--panel)" stroke="var(--aux)" stroke-width="2"/></svg>Converter<kbd>C</kbd></button>
+      <button class="tool" data-tool="link" aria-pressed="false"><svg viewBox="0 0 30 24"><path d="M3 18Q10 3 24 9" stroke="var(--link)" stroke-width="1.8" fill="none"/><path d="M27 10l-7 2 2-6z" fill="var(--link)"/></svg>Connector<kbd>K</kbd></button>
+    </div>
+    <div class="diawrap" id="diawrap">
+      <svg id="dia" width="1400" height="900" aria-label="Model diagram"></svg>
+      <div class="hint" id="hint"></div>
+    </div>
+    <aside class="insp" id="insp" aria-label="Inspector"></aside>
+  </section>
+
+  <section class="runbar" aria-label="Run settings">
+    <button class="primary" id="runBtn">Run</button>
+    <label><input type="checkbox" id="autoRun"> Rerun on every edit</label>
+    <label>Start <input type="number" id="tStart" step="any"></label>
+    <label>Stop <input type="number" id="tStop" step="any"></label>
+    <label>DT <input type="number" id="tDt" step="any" min="0"></label>
+    <label>Method <select id="method"><option value="euler">Euler</option><option value="rk4">Runge–Kutta 4</option></select></label>
+    <label>Time units <input type="text" id="tUnits" style="width:70px"></label>
+    <button id="pinBtn" title="Keep this run on the graph as dashed lines, to compare against the next change">Pin this run</button>
+    <div class="status" id="status" role="status"></div>
+  </section>
+
+  <section class="results">
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="graph" aria-selected="true">Graph</button>
+      <button class="tab" role="tab" data-tab="table" aria-selected="false">Table</button>
+      <button class="tab" role="tab" data-tab="eqs" aria-selected="false">Equations</button>
+      <span class="spacer"></span>
+      <span id="graphOpts" class="row">
+        <button id="copyGraph" title="Copy the graph, with a legend, as a picture">Copy graph</button>
+        <label>Plot <select id="gMode"><option value="time">against time</option><option value="phase">one against another</option></select></label>
+        <label>Y axis <select id="gScale"><option value="shared">one shared scale</option><option value="each">each line scaled</option></select></label>
+      </span>
+      <span id="tableOpts" class="row" hidden>
+        <button id="copyCsv">Copy CSV</button><button id="saveCsv">Save CSV</button>
+      </span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <canvas id="plot" aria-label="Graph of model results"></canvas>
+    <div class="tablewrap" id="tablePane" hidden></div>
+    <pre class="eqs" id="eqPane" hidden></pre>
+  </section>
+</div>
+
+<div class="overlay" id="help" hidden>
+  <div class="helpcard" role="dialog" aria-label="How Pools and Fluxes works">
+    <div class="row"><h2>How it works</h2><span class="spacer"></span><button id="helpClose">Close</button></div>
+    <h3>The four pieces</h3>
+    <ul>
+      <li><b>Pool</b> (a stock, the rectangle) holds an amount: g C m⁻², kg N ha⁻¹, number of hares. You give it a starting value.</li>
+      <li><b>Flux</b> (the pipe with a valve) moves material into or out of a pool. Its equation gives a rate, amount per unit time. A cloud at the end of a pipe means the material comes from, or goes to, somewhere outside the model.</li>
+      <li><b>Converter</b> (the circle) holds a parameter, such as a rate constant, or a calculation built from other quantities.</li>
+      <li><b>Connector</b> (the thin red arrow) carries information, not material. An equation may use a quantity only if a connector runs from that quantity to it. A decomposition flux of <code>k * Soil_C</code> therefore needs two connectors: one from <code>k</code> and one from the pool <code>Soil C</code> that it drains.</li>
+    </ul>
+    <h3>Building a model</h3>
+    <ul>
+      <li>Pick <b>Pool</b> and click the canvas. Pick <b>Flux</b> and drag from a pool to another pool, or from empty space into a pool. Pick <b>Connector</b> and drag from a quantity to the flux or converter that uses it.</li>
+      <li>Click anything to edit it on the right. Drag pools and converters to move them, drag a cloud onto a pool to attach the pipe, drag a connector to bend it. <kbd>Delete</kbd> removes the selected item.</li>
+      <li>In equations, spaces in names become underscores: the pool <code>Soil C</code> is written <code>Soil_C</code>. Capitals do not matter.</li>
+    </ul>
+    <h3>Equation language</h3>
+    <p><code>+ - * / ^</code> and parentheses; <code>exp ln log10 sqrt abs min max sin cos mod int round</code>; <code>IF a &gt; b THEN x ELSE y</code> with <code>&lt; &lt;= &gt; &gt;= = &lt;&gt; AND OR NOT</code>; <code>TIME</code>, <code>DT</code>, <code>PI</code>; <code>STEP(height, t)</code> switches on at time t; <code>RAMP(slope, t)</code> rises from time t; <code>PULSE(amount, t, interval)</code> moves an amount in a single step at time t, repeating every interval if one is given.</p>
+    <h3>Predict, then run</h3>
+    <p>Results stay hidden until you press <b>Run</b>, and they hide again whenever you change the model. Before each run, choose what to plot by clicking names above the graph, and write down or sketch what you expect. Tick <b>Rerun on every edit</b> to watch the graph change as you type or drag a slider instead.</p>
+    <h3>What the computer does</h3>
+    <p>Each pool's equation is <code>d(pool)/dt = inflows − outflows</code>; the Equations tab lists them. With <b>Euler</b>, each step computes every flux from the current pools, then sets <code>pool(t + DT) = pool(t) + DT × (inflows − outflows)</code>. Because the fluxes are held fixed for the whole step while the pools change, a large DT overshoots. <b>Runge–Kutta 4</b> evaluates the fluxes four times inside each step and averages them, so it is far more accurate at the same DT. A practical test: halve DT and run again. If the graph changes, DT was too large.</p>
+    <p>A <b>non-negative</b> pool cuts its outflows when they would drain it below zero within a step. A <b>one-way</b> flux never runs backwards: a negative result is treated as zero.</p>
+    <h3>Saving</h3>
+    <p>Your model is kept in this browser between visits. <b>Save</b> writes a .json file you can hand in or share; <b>Open</b> reads one back. <b>Copy model</b> puts the same text on the clipboard; pasting that text anywhere on this page (outside a text box) opens it. <b>Copy graph</b> copies the graph, with a legend, as a picture for a document or slide.</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   Equation parser: text -> syntax tree -> JS closure (no eval)
+   ============================================================ */
+const KEYWORDS = new Set(["if","then","else","and","or","not"]);
+const SPECIAL = new Set(["time","dt","pi","starttime","stoptime"]);
+const FN = {
+  exp:[1,1,Math.exp], ln:[1,1,Math.log], log10:[1,1,Math.log10], sqrt:[1,1,Math.sqrt], abs:[1,1,Math.abs],
+  sin:[1,1,Math.sin], cos:[1,1,Math.cos], tan:[1,1,Math.tan], int:[1,1,Math.floor], round:[1,1,Math.round],
+  min:[2,99,Math.min], max:[2,99,Math.max], mod:[2,2,(a,b)=>a-b*Math.floor(a/b)],
+  step:[2,2,null], ramp:[2,2,null], pulse:[2,3,null]
+};
+class EqError extends Error {}
+
+function tokenize(src){
+  const toks=[]; let i=0;
+  while(i<src.length){
+    const c=src[i], rest=src.slice(i);
+    if(/\s/.test(c)){ i++; continue; }
+    let m;
+    if((m=/^(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/.exec(rest))){ toks.push({t:"num",v:parseFloat(m[0])}); i+=m[0].length; continue; }
+    if((m=/^[A-Za-z_][A-Za-z0-9_]*/.exec(rest))){
+      const w=m[0], lw=w.toLowerCase();
+      toks.push(KEYWORDS.has(lw)?{t:lw}:{t:"id",v:w}); i+=w.length; continue;
+    }
+    const two=src.substr(i,2);
+    const TWO={"<=":"<=",">=":">=","<>":"<>","!=":"<>","==":"=","&&":"and","||":"or"};
+    if(TWO[two]){ const v=TWO[two]; toks.push(v==="and"||v==="or"?{t:v}:{t:"op",v}); i+=2; continue; }
+    if("+-*/^(),<>=".includes(c)){ toks.push({t:"op",v:c}); i++; continue; }
+    if(c==="!"){ toks.push({t:"not"}); i++; continue; }
+    if(c==="×"){ toks.push({t:"op",v:"*"}); i++; continue; }
+    if(c==="−"){ toks.push({t:"op",v:"-"}); i++; continue; }
+    throw new EqError(`The character "${c}" is not allowed in an equation.`);
+  }
+  return toks;
+}
+
+function parse(src){
+  const toks=tokenize(src); let p=0;
+  const peek=()=>toks[p], next=()=>toks[p++];
+  const isOp=v=>toks[p]&&toks[p].t==="op"&&toks[p].v===v;
+  const expect=v=>{ if(!isOp(v)) throw new EqError(`Expected "${v}"${toks[p]?"":" before the end"}.`); p++; };
+  function expr(){
+    if(peek()&&peek().t==="if"){
+      next(); const c=expr();
+      if(!peek()||peek().t!=="then") throw new EqError("IF needs a THEN.");
+      next(); const a=expr();
+      if(!peek()||peek().t!=="else") throw new EqError("IF ... THEN needs an ELSE.");
+      next(); const b=expr();
+      return {k:"if",c,a,b};
+    }
+    return or();
+  }
+  function or(){ let a=and(); while(peek()&&peek().t==="or"){ next(); a={k:"bin",op:"or",a,b:and()}; } return a; }
+  function and(){ let a=not(); while(peek()&&peek().t==="and"){ next(); a={k:"bin",op:"and",a,b:not()}; } return a; }
+  function not(){ if(peek()&&peek().t==="not"){ next(); return {k:"not",a:not()}; } return cmp(); }
+  function cmp(){
+    let a=add();
+    for(const op of ["<=",">=","<>","<",">","="]) if(isOp(op)){ next(); return {k:"bin",op,a,b:add()}; }
+    return a;
+  }
+  function add(){ let a=mul(); while(isOp("+")||isOp("-")){ const op=next().v; a={k:"bin",op,a,b:mul()}; } return a; }
+  function mul(){ let a=unary(); while(isOp("*")||isOp("/")){ const op=next().v; a={k:"bin",op,a,b:unary()}; } return a; }
+  function unary(){
+    if(isOp("-")){ next(); return {k:"neg",a:unary()}; }
+    if(isOp("+")){ next(); return unary(); }
+    return pow();
+  }
+  function pow(){ const a=primary(); if(isOp("^")){ next(); return {k:"bin",op:"^",a,b:unary()}; } return a; }
+  function primary(){
+    const t=next();
+    if(!t) throw new EqError("The equation ends too soon.");
+    if(t.t==="num") return {k:"num",v:t.v};
+    if(t.t==="id"){
+      if(isOp("(")){
+        next(); const args=[];
+        if(!isOp(")")){ args.push(expr()); while(isOp(",")){ next(); args.push(expr()); } }
+        expect(")");
+        return {k:"call",f:t.v.toLowerCase(),name:t.v,args};
+      }
+      return {k:"var",name:t.v};
+    }
+    if(t.t==="op"&&t.v==="("){ const e=expr(); expect(")"); return e; }
+    const shown=t.t==="op"?t.v:t.t.toUpperCase();
+    throw new EqError(`Unexpected "${shown}".`);
+  }
+  if(!toks.length) throw new EqError("The equation is empty.");
+  const tree=expr();
+  if(p<toks.length){ const t=toks[p]; throw new EqError(`Unexpected "${t.v??t.t.toUpperCase()}" after a complete expression. Is an operator missing?`); }
+  return tree;
+}
+
+// Compile a tree. resolve(name) -> index into env.v, or throws. Returns env => number.
+function compile(n, resolve){
+  switch(n.k){
+    case "num": { const v=n.v; return ()=>v; }
+    case "var": {
+      const k=n.name.toLowerCase();
+      if(k==="time") return e=>e.t;
+      if(k==="dt") return e=>e.dt;
+      if(k==="pi") return ()=>Math.PI;
+      if(k==="starttime") return e=>e.t0;
+      if(k==="stoptime") return e=>e.t1;
+      const i=resolve(n.name); return e=>e.v[i];
+    }
+    case "neg": { const a=compile(n.a,resolve); return e=>-a(e); }
+    case "not": { const a=compile(n.a,resolve); return e=>a(e)?0:1; }
+    case "if": { const c=compile(n.c,resolve), a=compile(n.a,resolve), b=compile(n.b,resolve); return e=>c(e)?a(e):b(e); }
+    case "bin": {
+      const a=compile(n.a,resolve), b=compile(n.b,resolve);
+      switch(n.op){
+        case "+": return e=>a(e)+b(e);
+        case "-": return e=>a(e)-b(e);
+        case "*": return e=>a(e)*b(e);
+        case "/": return e=>a(e)/b(e);
+        case "^": return e=>Math.pow(a(e),b(e));
+        case "<": return e=>a(e)<b(e)?1:0;
+        case ">": return e=>a(e)>b(e)?1:0;
+        case "<=": return e=>a(e)<=b(e)?1:0;
+        case ">=": return e=>a(e)>=b(e)?1:0;
+        case "=": return e=>a(e)===b(e)?1:0;
+        case "<>": return e=>a(e)!==b(e)?1:0;
+        case "and": return e=>(a(e)&&b(e))?1:0;
+        case "or": return e=>(a(e)||b(e))?1:0;
+      }
+      break;
+    }
+    case "call": {
+      const spec=FN[n.f];
+      if(!spec) throw new EqError(`"${n.name}" is not a function this simulator knows.`);
+      const [lo,hi,f]=spec;
+      if(n.args.length<lo||n.args.length>hi) throw new EqError(`${n.name.toUpperCase()} takes ${lo===hi?lo:lo+" to "+(hi===99?"any number of":hi)} inputs, not ${n.args.length}.`);
+      const A=n.args.map(x=>compile(x,resolve));
+      if(n.f==="step") return e=>e.t>=A[1](e)-1e-9*e.dt?A[0](e):0;
+      if(n.f==="ramp") return e=>e.t>A[1](e)?A[0](e)*(e.t-A[1](e)):0;
+      if(n.f==="pulse") return e=>{
+        // Fires during the whole step that starts at the pulse time, so every RK4 stage agrees.
+        const first=A[1](e), every=A.length>2?A[2](e):0, s=e.stepT, tol=1e-9*e.dt;
+        if(s<first-tol) return 0;
+        let target=first;
+        if(every>0) target=first+Math.floor((s-first+tol)/every)*every;
+        return (s>=target-tol&&s<target+e.dt-tol)?A[0](e)/e.dt:0;
+      };
+      if(A.length===1){ const a=A[0]; return e=>f(a(e)); }
+      if(A.length===2){ const a=A[0],b=A[1]; return e=>f(a(e),b(e)); }
+      return e=>f(...A.map(x=>x(e)));
+    }
+  }
+  throw new EqError("Could not read the equation.");
+}
+
+// Names that an equation uses (excluding TIME etc.).
+function refsOf(n, out=new Set()){
+  if(!n) return out;
+  if(n.k==="var"){ if(!SPECIAL.has(n.name.toLowerCase())) out.add(n.name); }
+  else if(n.k==="call") n.args.forEach(a=>refsOf(a,out));
+  else ["a","b","c"].forEach(f=>n[f]&&refsOf(n[f],out));
+  return out;
+}
+
+/* ============================================================
+   Model state
+   ============================================================ */
+const TYPE_LABEL={stock:"Pool",flow:"Flux",aux:"Converter",link:"Connector"};
+const SW=124, SH=60, AR=20, VR=11, CLOUD=15;
+let model, selId=null, tool="select", results=null, pinned=null, errors={}, warnings=[], nextId=1;
+let tab="graph";
+const $=s=>document.querySelector(s);
+const svg=$("#dia");
+
+const keyOf=name=>String(name).trim().replace(/\s+/g,"_").toLowerCase();
+const eqName=name=>String(name).trim().replace(/\s+/g,"_");
+const get=id=>model.items.find(i=>i.id===id);
+const uid=()=>"i"+(nextId++);
+const vars=()=>model.items.filter(i=>i.type!=="link");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const colorVar=it=>`var(--s${(parseInt(it.id.slice(1),10)%8)+1})`;
+
+function blankModel(){
+  return {name:"Untitled model", settings:{start:0,stop:100,dt:0.25,method:"euler",units:"yr"}, items:[], plot:[]};
+}
+function syncNextId(){
+  nextId=1+Math.max(0,...model.items.map(i=>parseInt(i.id.slice(1),10)||0));
+}
+function uniqueName(base){
+  const taken=new Set(vars().map(v=>keyOf(v.name)));
+  for(let n=1;;n++){ const nm=`${base} ${n}`; if(!taken.has(keyOf(nm))) return nm; }
+}
+
+/* ============================================================
+   Example models
+   ============================================================ */
+const EXAMPLES={
+  soil:()=>({name:"Soil carbon: one pool", settings:{start:0,stop:200,dt:1,method:"euler",units:"yr"}, plot:["i1"], items:[
+    {id:"i1",type:"stock",name:"Soil C",x:390,y:220,init:"2000",nonneg:true,units:"g C m-2"},
+    {id:"i2",type:"flow",name:"litter input",from:null,to:"i1",fx:150,fy:220,tx:0,ty:0,eq:"litter_rate",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i3",type:"flow",name:"decomposition",from:"i1",to:null,fx:0,fy:0,tx:640,ty:220,eq:"k * Soil_C",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i4",type:"aux",name:"litter rate",x:235,y:100,eq:"300",units:"g C m-2 yr-1"},
+    {id:"i5",type:"aux",name:"k",x:560,y:100,eq:"0.03",units:"yr-1"},
+    {id:"i6",type:"link",from:"i4",to:"i2",bend:0},
+    {id:"i7",type:"link",from:"i5",to:"i3",bend:0},
+    {id:"i8",type:"link",from:"i1",to:"i3",bend:-30}
+  ]}),
+  plantsoil:()=>({name:"Plant and soil carbon", settings:{start:0,stop:300,dt:0.5,method:"euler",units:"yr"}, plot:["i1","i2"], items:[
+    {id:"i1",type:"stock",name:"Plant C",x:340,y:190,init:"100",nonneg:true,units:"g C m-2"},
+    {id:"i2",type:"stock",name:"Soil C",x:340,y:400,init:"5000",nonneg:true,units:"g C m-2"},
+    {id:"i3",type:"flow",name:"GPP",from:null,to:"i1",fx:100,fy:190,tx:0,ty:0,eq:"GPP_max * Plant_C / (Plant_C + half_saturation)",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i4",type:"flow",name:"plant respiration",from:"i1",to:null,fx:0,fy:0,tx:600,ty:190,eq:"resp_fraction * GPP",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i5",type:"flow",name:"litterfall",from:"i1",to:"i2",fx:0,fy:0,tx:0,ty:0,eq:"k_litter * Plant_C",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i6",type:"flow",name:"decomposition",from:"i2",to:null,fx:0,fy:0,tx:600,ty:400,eq:"k_decomp * Soil_C",uniflow:true,units:"g C m-2 yr-1"},
+    {id:"i7",type:"aux",name:"GPP max",x:90,y:80,eq:"2000",units:"g C m-2 yr-1"},
+    {id:"i8",type:"aux",name:"half saturation",x:250,y:70,eq:"1000",units:"g C m-2"},
+    {id:"i9",type:"aux",name:"resp fraction",x:560,y:80,eq:"0.5",units:"fraction of GPP"},
+    {id:"i10",type:"aux",name:"k litter",x:190,y:300,eq:"0.1",units:"yr-1"},
+    {id:"i11",type:"aux",name:"k decomp",x:520,y:510,eq:"0.02",units:"yr-1"},
+    {id:"i12",type:"aux",name:"NEP",x:760,y:300,eq:"GPP - plant_respiration - decomposition",units:"g C m-2 yr-1"},
+    {id:"i13",type:"link",from:"i7",to:"i3",bend:0},
+    {id:"i14",type:"link",from:"i8",to:"i3",bend:0},
+    {id:"i15",type:"link",from:"i1",to:"i3",bend:40},
+    {id:"i16",type:"link",from:"i9",to:"i4",bend:0},
+    {id:"i17",type:"link",from:"i3",to:"i4",bend:-150},
+    {id:"i18",type:"link",from:"i10",to:"i5",bend:0},
+    {id:"i19",type:"link",from:"i1",to:"i5",bend:-40},
+    {id:"i20",type:"link",from:"i11",to:"i6",bend:0},
+    {id:"i21",type:"link",from:"i2",to:"i6",bend:30},
+    {id:"i22",type:"link",from:"i3",to:"i12",bend:-60},
+    {id:"i23",type:"link",from:"i4",to:"i12",bend:0},
+    {id:"i24",type:"link",from:"i6",to:"i12",bend:0}
+  ]}),
+  leaf:()=>({name:"Leaf decomposition: carbon and nitrogen", settings:{start:0,stop:730,dt:0.1,method:"euler",units:"d"}, plot:["i1","i2","i3"],
+    notes:"Detritus starts as a leaf (C:N 60) and also receives dead microbes (C:N 8). Each time step the microbes take a bite: C uptake from the detritus, with N coming along at the detritus C:N. They can build half the bite's carbon into biomass (e = 0.5), which needs N at C:N 8. A bite with more N than that releases the surplus as ammonium (gross mineralization). A bite short of N draws ammonium from the mineral pool (gross immobilization); any shortfall that pool cannot cover leaves carbon that cannot be built, and it is burned (overflow respiration). Separately, maintenance burns microbial biomass and frees its N at C:N 8. Microbial N stays at Microbial C / 8 throughout. Mineral N starts at 20 mg, enough that the bites' N shortfalls are always covered: net immobilization early, net mineralization later. Click 'initial mineral N' and slide it below about 7 to see N limitation and overflow respiration appear; at 0, decomposition nearly stalls.", items:[
+    {id:"i1",type:"stock",name:"Detritus C",x:230,y:160,init:"400",nonneg:true,units:"mg C"},
+    {id:"i2",type:"stock",name:"Microbial C",x:560,y:160,init:"4",nonneg:true,units:"mg C"},
+    {id:"i3",type:"stock",name:"CO2",x:880,y:160,init:"0",nonneg:true,units:"mg C"},
+    {id:"i4",type:"stock",name:"Detritus N",x:230,y:430,init:"400 / 60",nonneg:true,units:"mg N"},
+    {id:"i5",type:"stock",name:"Microbial N",x:560,y:430,init:"0.5",nonneg:true,units:"mg N"},
+    {id:"i6",type:"stock",name:"Mineral N",x:880,y:430,init:"initial_mineral_N",nonneg:true,units:"mg N"},
+    {id:"i7",type:"flow",name:"C uptake",from:"i1",to:"i2",fx:0,fy:0,tx:0,ty:0,eq:"Vmax * Microbial_C * Detritus_C / (K + Detritus_C)",uniflow:true,units:"mg C d-1"},
+    {id:"i8",type:"flow",name:"microbial death",from:"i2",to:"i1",fx:0,fy:0,tx:0,ty:0,eq:"kd * Microbial_C",uniflow:true,units:"mg C d-1"},
+    {id:"i9",type:"flow",name:"respiration",from:"i2",to:"i3",fx:0,fy:0,tx:0,ty:0,eq:"growth_resp + overflow_resp + maintenance_resp",uniflow:true,units:"mg C d-1"},
+    {id:"i10",type:"flow",name:"N uptake",from:"i4",to:"i5",fx:0,fy:0,tx:0,ty:0,eq:"C_uptake / detritus_CN",uniflow:true,units:"mg N d-1"},
+    {id:"i11",type:"flow",name:"death N",from:"i5",to:"i4",fx:0,fy:0,tx:0,ty:0,eq:"kd * Microbial_N",uniflow:true,units:"mg N d-1"},
+    {id:"i12",type:"flow",name:"gross mineralization",from:"i5",to:"i6",fx:0,fy:0,tx:0,ty:0,eq:"MAX(0, bite_N_balance)",uniflow:true,units:"mg N d-1"},
+    {id:"i13",type:"flow",name:"gross immobilization",from:"i6",to:"i5",fx:0,fy:0,tx:0,ty:0,eq:"MIN(MAX(0, -bite_N_balance), kI * Mineral_N)",uniflow:true,units:"mg N d-1"},
+    {id:"i14",type:"flow",name:"maintenance N",from:"i5",to:"i6",fx:0,fy:0,tx:0,ty:0,eq:"m * Microbial_N",uniflow:true,units:"mg N d-1"},
+    {id:"i15",type:"aux",name:"detritus CN",x:90,y:300,eq:"Detritus_C / Detritus_N",units:"g C per g N"},
+    {id:"i16",type:"aux",name:"bite N balance",x:740,y:300,eq:"N_uptake - e * C_uptake / CN_microbe",units:"mg N d-1 (+ surplus, - shortfall)"},
+    {id:"i17",type:"aux",name:"growth resp",x:650,y:50,eq:"(1 - e) * C_uptake",units:"mg C d-1"},
+    {id:"i18",type:"aux",name:"overflow resp",x:775,y:50,eq:"CN_microbe * (MAX(0, -bite_N_balance) - gross_immobilization)",units:"mg C d-1"},
+    {id:"i19",type:"aux",name:"maintenance resp",x:900,y:50,eq:"m * Microbial_C",units:"mg C d-1"},
+    {id:"i20",type:"aux",name:"N limited",x:1020,y:130,eq:"IF overflow_resp > 0 THEN 1 ELSE 0",units:"1 = yes"},
+    {id:"i21",type:"aux",name:"Vmax",x:330,y:50,eq:"0.15",units:"mg C per mg microbial C per d"},
+    {id:"i22",type:"aux",name:"K",x:460,y:50,eq:"200",units:"mg C"},
+    {id:"i23",type:"aux",name:"kd",x:330,y:300,eq:"0.02",units:"d-1"},
+    {id:"i24",type:"aux",name:"e",x:470,y:300,eq:"0.5",units:"carbon use efficiency"},
+    {id:"i25",type:"aux",name:"CN microbe",x:600,y:300,eq:"8",units:"g C per g N"},
+    {id:"i26",type:"aux",name:"kI",x:860,y:570,eq:"0.5",units:"d-1"},
+    {id:"i27",type:"aux",name:"m",x:1020,y:290,eq:"0.01",units:"d-1"},
+    {id:"i61",type:"aux",name:"initial mineral N",x:1050,y:430,eq:"20",units:"mg N"},
+    {id:"i62",type:"link",from:"i61",to:"i6",bend:0},
+    {id:"i28",type:"link",from:"i21",to:"i7",bend:0},
+    {id:"i29",type:"link",from:"i22",to:"i7",bend:0},
+    {id:"i30",type:"link",from:"i2",to:"i7",bend:0},
+    {id:"i31",type:"link",from:"i1",to:"i7",bend:0},
+    {id:"i32",type:"link",from:"i23",to:"i8",bend:0},
+    {id:"i33",type:"link",from:"i2",to:"i8",bend:0},
+    {id:"i34",type:"link",from:"i17",to:"i9",bend:0},
+    {id:"i35",type:"link",from:"i18",to:"i9",bend:0},
+    {id:"i36",type:"link",from:"i19",to:"i9",bend:0},
+    {id:"i37",type:"link",from:"i7",to:"i10",bend:0},
+    {id:"i38",type:"link",from:"i15",to:"i10",bend:0},
+    {id:"i39",type:"link",from:"i23",to:"i11",bend:0},
+    {id:"i40",type:"link",from:"i5",to:"i11",bend:0},
+    {id:"i41",type:"link",from:"i16",to:"i12",bend:0},
+    {id:"i42",type:"link",from:"i16",to:"i13",bend:0},
+    {id:"i43",type:"link",from:"i26",to:"i13",bend:0},
+    {id:"i44",type:"link",from:"i6",to:"i13",bend:0},
+    {id:"i45",type:"link",from:"i27",to:"i14",bend:0},
+    {id:"i46",type:"link",from:"i5",to:"i14",bend:0},
+    {id:"i47",type:"link",from:"i1",to:"i15",bend:0},
+    {id:"i48",type:"link",from:"i4",to:"i15",bend:0},
+    {id:"i49",type:"link",from:"i10",to:"i16",bend:0},
+    {id:"i50",type:"link",from:"i7",to:"i16",bend:0},
+    {id:"i51",type:"link",from:"i24",to:"i16",bend:0},
+    {id:"i52",type:"link",from:"i25",to:"i16",bend:0},
+    {id:"i53",type:"link",from:"i24",to:"i17",bend:0},
+    {id:"i54",type:"link",from:"i7",to:"i17",bend:0},
+    {id:"i55",type:"link",from:"i25",to:"i18",bend:0},
+    {id:"i56",type:"link",from:"i16",to:"i18",bend:0},
+    {id:"i57",type:"link",from:"i13",to:"i18",bend:0},
+    {id:"i58",type:"link",from:"i27",to:"i19",bend:0},
+    {id:"i59",type:"link",from:"i2",to:"i19",bend:0},
+    {id:"i60",type:"link",from:"i18",to:"i20",bend:0}
+  ]}),
+  lv:()=>({name:"Hares and lynx", settings:{start:0,stop:100,dt:0.05,method:"rk4",units:"yr"}, plot:["i1","i2"], items:[
+    {id:"i1",type:"stock",name:"Hares",x:320,y:180,init:"50",nonneg:true,units:"animals"},
+    {id:"i2",type:"stock",name:"Lynx",x:320,y:420,init:"10",nonneg:true,units:"animals"},
+    {id:"i3",type:"flow",name:"hare births",from:null,to:"i1",fx:90,fy:180,tx:0,ty:0,eq:"birth_rate * Hares",uniflow:true,units:"animals yr-1"},
+    {id:"i4",type:"flow",name:"predation",from:"i1",to:null,fx:0,fy:0,tx:600,ty:180,eq:"attack_rate * Hares * Lynx",uniflow:true,units:"hares yr-1"},
+    {id:"i5",type:"flow",name:"lynx births",from:null,to:"i2",fx:90,fy:420,tx:0,ty:0,eq:"efficiency * predation",uniflow:true,units:"lynx yr-1"},
+    {id:"i6",type:"flow",name:"lynx deaths",from:"i2",to:null,fx:0,fy:0,tx:600,ty:420,eq:"death_rate * Lynx",uniflow:true,units:"lynx yr-1"},
+    {id:"i7",type:"aux",name:"birth rate",x:150,y:70,eq:"0.5",units:"yr-1"},
+    {id:"i8",type:"aux",name:"attack rate",x:500,y:70,eq:"0.02",units:"per lynx per yr"},
+    {id:"i9",type:"aux",name:"efficiency",x:140,y:300,eq:"0.1",units:"lynx per hare eaten"},
+    {id:"i10",type:"aux",name:"death rate",x:500,y:530,eq:"0.4",units:"yr-1"},
+    {id:"i11",type:"link",from:"i7",to:"i3",bend:0},
+    {id:"i12",type:"link",from:"i1",to:"i3",bend:40},
+    {id:"i13",type:"link",from:"i8",to:"i4",bend:0},
+    {id:"i14",type:"link",from:"i1",to:"i4",bend:-40},
+    {id:"i15",type:"link",from:"i2",to:"i4",bend:50},
+    {id:"i16",type:"link",from:"i9",to:"i5",bend:0},
+    {id:"i17",type:"link",from:"i4",to:"i5",bend:-60},
+    {id:"i18",type:"link",from:"i10",to:"i6",bend:0},
+    {id:"i19",type:"link",from:"i2",to:"i6",bend:40}
+  ]})
+};
+
+/* ============================================================
+   Build + simulate
+   ============================================================ */
+function buildSim(){
+  const errs={}; warnings=[];
+  const addErr=(it,msg)=>{ (errs[it.id]=errs[it.id]||[]).push(msg); };
+  const V=vars(), links=model.items.filter(i=>i.type==="link");
+  const idx=new Map(), byKey=new Map();
+  V.forEach((it,i)=>idx.set(it.id,i));
+  for(const it of V){
+    const nm=String(it.name).trim(), k=keyOf(nm);
+    if(!nm){ addErr(it,"Needs a name."); continue; }
+    if(!/^[A-Za-z_][A-Za-z0-9_ ]*$/.test(nm)){ addErr(it,"Names may use letters, numbers, spaces and _, and must start with a letter."); continue; }
+    if(SPECIAL.has(k)||KEYWORDS.has(k)||FN[k]){ addErr(it,`"${nm}" is a reserved word; choose another name.`); continue; }
+    if(byKey.has(k)){ addErr(it,`Two items are called "${nm}".`); addErr(V[byKey.get(k)],`Two items are called "${nm}".`); continue; }
+    byKey.set(k,idx.get(it.id));
+  }
+  const into=new Map();
+  for(const l of links){ if(!into.has(l.to)) into.set(l.to,new Set()); into.get(l.to).add(l.from); }
+
+  const compiled=new Map(); // id -> {fn, deps:[idx]}
+  const used=new Set();      // "from>to" pairs actually used
+  for(const it of V){
+    const src=it.type==="stock"?it.init:it.eq;
+    const what=it.type==="stock"?"initial value":"equation";
+    if(src==null||!String(src).trim()){ addErr(it,`Needs an ${what}.`); continue; }
+    let tree;
+    try{ tree=parse(String(src)); }catch(e){ addErr(it,e instanceof EqError?e.message:"Could not read the "+what+"."); continue; }
+    const deps=[]; let ok=true;
+    for(const r of refsOf(tree)){
+      const j=byKey.get(keyOf(r));
+      if(j==null){ addErr(it,`"${r}" is not the name of anything in the model.`); ok=false; continue; }
+      const s=V[j];
+      if(s.id===it.id){ addErr(it,"An equation cannot use its own item."); ok=false; continue; }
+      if(it.type==="stock"&&s.type!=="aux"){ addErr(it,"An initial value may use numbers and converters only."); ok=false; continue; }
+      if(!(into.get(it.id)&&into.get(it.id).has(s.id))){ addErr(it,`Uses ${s.name}, but no connector runs from ${s.name} to ${it.name}.`); ok=false; continue; }
+      used.add(s.id+">"+it.id); deps.push(j);
+    }
+    if(!ok) continue;
+    try{ compiled.set(it.id,{fn:compile(tree,name=>byKey.get(keyOf(name))),deps}); }
+    catch(e){ addErr(it,e instanceof EqError?e.message:"Could not read the "+what+"."); }
+  }
+  for(const l of links){
+    const a=get(l.from), b=get(l.to);
+    if(a&&b&&!used.has(l.from+">"+l.to)&&!errs[b.id]) warnings.push(`The connector from ${a.name} to ${b.name} is not used in ${b.name}'s ${b.type==="stock"?"initial value":"equation"}.`);
+  }
+  for(const f of V.filter(v=>v.type==="flow")) if(!f.from&&!f.to) warnings.push(`${f.name} is not attached to any pool.`);
+  if(Object.keys(errs).length) return {errs};
+
+  // Order fluxes and converters so each is computed after everything it uses.
+  const calc=V.filter(v=>v.type!=="stock");
+  const calcSet=new Set(calc.map(v=>idx.get(v.id)));
+  const order=[], state=new Map();
+  let cycle=null;
+  const visit=(i,path)=>{
+    if(state.get(i)===2||cycle) return;
+    if(state.get(i)===1){ cycle=path.slice(path.indexOf(i)).map(j=>V[j]); return; }
+    state.set(i,1);
+    for(const d of compiled.get(V[i].id).deps) if(calcSet.has(d)) visit(d,[...path,i]);
+    state.set(i,2); order.push(i);
+  };
+  for(const v of calc){ const i=idx.get(v.id); visit(i,[i]); }
+  if(cycle){
+    const names=cycle.map(c=>c.name).join(" → ");
+    cycle.forEach(c=>addErr(c,`Circular: ${names} each need the other to be computed first. Break the loop by routing it through a pool.`));
+    return {errs};
+  }
+  const stockI=V.map((v,i)=>v.type==="stock"?i:-1).filter(i=>i>=0);
+  const flows=V.map((v,i)=>v.type==="flow"?{i,from:v.from?idx.get(v.from):-1,to:v.to?idx.get(v.to):-1,uni:v.uniflow!==false}:null).filter(Boolean);
+  return {errs, V, order:order.map(i=>({i,fn:compiled.get(V[i].id).fn,uni:V[i].type==="flow"&&V[i].uniflow!==false})),
+          inits:stockI.map(i=>({i,fn:compiled.get(V[i].id).fn,nonneg:V[i].nonneg!==false})), flows};
+}
+
+function simulate(sim){
+  const st=model.settings, t0=+st.start, t1=+st.stop, dt=+st.dt;
+  if(!(dt>0)) return {fail:"DT must be a positive number."};
+  if(!(t1>t0)) return {fail:"Stop time must be later than start time."};
+  const N=Math.round((t1-t0)/dt);
+  if(N>200000) return {fail:`That is ${N.toLocaleString()} steps. Use a larger DT or a shorter run (200,000 steps at most).`};
+  const {V,order,inits,flows}=sim, nV=V.length;
+  const v=new Float64Array(nV), env={v,t:t0,dt,stepT:t0,t0,t1};
+  const nonneg=inits.filter(s=>s.nonneg).map(s=>s.i);
+  const outOf=new Map(), inTo=new Map();
+  flows.forEach(f=>{ if(f.from>=0){ if(!outOf.has(f.from)) outOf.set(f.from,[]); outOf.get(f.from).push(f.i); }
+                     if(f.to>=0){ if(!inTo.has(f.to)) inTo.set(f.to,[]); inTo.get(f.to).push(f.i); } });
+  // initial values: converters first (pools read as 0 here), then pools
+  for(const o of order){ try{ v[o.i]=o.fn(env); }catch(e){ v[o.i]=NaN; } }
+  const S=new Float64Array(nV);
+  for(const s of inits){ S[s.i]=s.fn(env); if(!isFinite(S[s.i])) return {fail:`The initial value of ${V[s.i].name} is not a finite number.`}; }
+
+  const rates=(Sx,t)=>{
+    for(const s of inits) v[s.i]=Sx[s.i];
+    env.t=t;
+    for(const o of order){ let x=o.fn(env); if(o.uni&&x<0) x=0; v[o.i]=x; }
+    // non-negative pools: scale outflows that would empty the pool within this step
+    for(const si of nonneg){
+      const outs=outOf.get(si); if(!outs) continue;
+      let O=0, I=0; outs.forEach(f=>O+=v[f]); (inTo.get(si)||[]).forEach(f=>I+=v[f]);
+      if(O>0&&Sx[si]+(I-O)*dt<0){ const k=Math.max(0,(Sx[si]/dt+I)/O); outs.forEach(f=>v[f]*=k); }
+    }
+    const d=new Float64Array(nV);
+    for(const f of flows){ const x=v[f.i]; if(f.from>=0) d[f.from]-=x; if(f.to>=0) d[f.to]+=x; }
+    return d;
+  };
+
+  const T=new Float64Array(N+1), Y=V.map(()=>new Float64Array(N+1));
+  let fail=null, last=N;
+  for(let k=0;k<=N;k++){
+    const t=t0+k*dt; env.stepT=t;
+    const k1=rates(S,t);
+    T[k]=t; for(let i=0;i<nV;i++) Y[i][k]=v[i];
+    const bad=V.findIndex((_,i)=>!isFinite(v[i]));
+    if(bad>=0){ fail=`At time ${fmt(t)}, ${V[bad].name} became ${isNaN(v[bad])?"undefined (for example 0/0)":"infinite"}. Check for division by zero or runaway growth; a smaller DT can help.`; last=k-1; break; }
+    if(k===N) break;
+    if(st.method==="rk4"){
+      const tmp=new Float64Array(nV), add=(kk,h)=>{ for(const s of inits) tmp[s.i]=S[s.i]+h*kk[s.i]; return tmp; };
+      const k2=rates(add(k1,dt/2),t+dt/2), k3=rates(add(k2,dt/2),t+dt/2), k4=rates(add(k3,dt),t+dt);
+      for(const s of inits){ S[s.i]+=dt/6*(k1[s.i]+2*k2[s.i]+2*k3[s.i]+k4[s.i]); if(s.nonneg&&S[s.i]<0) S[s.i]=0; }
+    } else {
+      for(const s of inits) S[s.i]+=dt*k1[s.i];
+    }
+  }
+  const n=last+1, series={};
+  V.forEach((it,i)=>series[it.id]=Y[i].subarray(0,n));
+  return {t:T.subarray(0,n), series, fail, steps:N, method:st.method, dt};
+}
+
+function run(){
+  clearTimeout(runTimer);
+  const sim=buildSim();
+  errors=sim.errs;
+  const nErr=Object.keys(errors).length;
+  if(!nErr){
+    const r=simulate(sim);
+    if(r.fail&&!r.t){ setStatus(r.fail,true); }
+    else{
+      results=r;
+      model.plot=(model.plot||[]).filter(id=>get(id));
+      if(!model.plot.length) model.plot=vars().filter(v=>v.type==="stock").map(v=>v.id);
+      if(r.fail) setStatus(r.fail,true);
+      else setStatus(`Ran ${r.steps.toLocaleString()} steps of ${fmt(r.dt)} ${model.settings.units||""} with ${r.method==="rk4"?"Runge–Kutta 4":"Euler"}.`+(warnings.length?" Note: "+warnings.join(" "):""));
+    }
+  } else {
+    setErrors();
+  }
+  render(); updateInspErr(); renderResults();
+}
+let runTimer=null;
+function scheduleRun(){
+  clearTimeout(runTimer);
+  runTimer=setTimeout($("#autoRun").checked?run:hideUntilRun,150);
+}
+// Results stay hidden until the student presses Run, so they predict before they see the outcome.
+// Errors are still checked on every edit, so problems show up while the model is being built.
+function hideUntilRun(){
+  errors=buildSim().errs; results=null;
+  if(Object.keys(errors).length) setErrors();
+  else setStatus("Not run yet. Choose what to plot, predict what will happen, then press Run.");
+  render(); updateInspErr(); renderResults();
+}
+
+function setStatus(msg,isErr){
+  const s=$("#status"); s.textContent=msg; s.style.color=isErr?"var(--err)":"";
+}
+function setErrors(){
+  const s=$("#status"); s.innerHTML=""; s.style.color="var(--err)";
+  const ids=Object.keys(errors);
+  s.append(`${ids.length} item${ids.length>1?"s need":" needs"} fixing before the model can run${results?" (graph shows the last good run)":""}: `);
+  ids.slice(0,6).forEach(id=>{ const b=document.createElement("button"); b.textContent=get(id).name||TYPE_LABEL[get(id).type]; b.title=errors[id].join(" "); b.onclick=()=>select(id); s.append(b); });
+}
+
+/* ============================================================
+   Diagram geometry + rendering
+   ============================================================ */
+function rectClip(s,px,py,pad=0){
+  const dx=px-s.x, dy=py-s.y;
+  if(!dx&&!dy) return {x:s.x,y:s.y};
+  const tx=dx?(SW/2+pad)/Math.abs(dx):Infinity, ty=dy?(SH/2+pad)/Math.abs(dy):Infinity, t=Math.min(tx,ty);
+  return {x:s.x+dx*t,y:s.y+dy*t};
+}
+function flowGeom(f){
+  const A0=f.from&&get(f.from), B0=f.to&&get(f.to);
+  // Fluxes joining the same two pools (e.g. uptake and death) are offset so they sit side by side.
+  let ox=0, oy=0, frac=0.5, inline=false;
+  if(A0&&B0){
+    const sib=model.items.filter(g=>g.type==="flow"&&g.from&&g.to&&((g.from===f.from&&g.to===f.to)||(g.from===f.to&&g.to===f.from)));
+    if(sib.length>1){
+      const [P,Q]=f.from<f.to?[A0,B0]:[B0,A0], ddx=Q.x-P.x, ddy=Q.y-P.y, LL=Math.hypot(ddx,ddy)||1, k=sib.indexOf(f)-(sib.length-1)/2;
+      const gap=sib.length>2?24:30;
+      ox=-ddy/LL*k*gap; oy=ddx/LL*k*gap;
+      // stagger valves along the pipe; with three, the middle valve sits nearer the start and its label runs along its own pipe
+      if(sib.length===2) frac=0.5+(f.from<f.to?k:-k)*0.14;
+      else if(k===0) inline=true; else frac=0.6;
+    }
+  }
+  const A=A0&&{x:A0.x+ox,y:A0.y+oy}, B=B0&&{x:B0.x+ox,y:B0.y+oy};
+  const a0=A?{x:A.x,y:A.y}:{x:f.fx,y:f.fy}, b0=B?{x:B.x,y:B.y}:{x:f.tx,y:f.ty};
+  const dx=b0.x-a0.x, dy=b0.y-a0.y, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+  const a=A?rectClip(A,b0.x,b0.y):{x:a0.x+ux*CLOUD,y:a0.y+uy*CLOUD};
+  const b=B?rectClip(B,a0.x,a0.y,2):{x:b0.x-ux*CLOUD,y:b0.y-uy*CLOUD};
+  if(inline) frac=(Math.abs(ux)>=Math.abs(uy)?ux:uy)>=0?0.2:0.8;  // valve at the left (or top) end, label reads along the pipe
+  return {a,b,a0,b0,ux,uy,ox,oy,inline,mid:{x:a.x+(b.x-a.x)*frac,y:a.y+(b.y-a.y)*frac}};
+}
+function center(it){ return it.type==="flow"?flowGeom(it).mid:{x:it.x,y:it.y}; }
+function trim(it,toward,pad){
+  if(it.type==="stock") return rectClip(it,toward.x,toward.y,pad);
+  const c=center(it), r=(it.type==="aux"?AR:VR)+pad, dx=toward.x-c.x, dy=toward.y-c.y, L=Math.hypot(dx,dy)||1;
+  return {x:c.x+dx/L*r,y:c.y+dy/L*r};
+}
+function linkGeom(l){
+  const S=get(l.from), T=get(l.to); if(!S||!T) return null;
+  const A=center(S), B=center(T), dx=B.x-A.x, dy=B.y-A.y, L=Math.hypot(dx,dy)||1;
+  const c={x:(A.x+B.x)/2-dy/L*(l.bend||0), y:(A.y+B.y)/2+dx/L*(l.bend||0)};
+  return {p0:trim(S,c,2), p1:trim(T,c,4), c, A, B};
+}
+function arrowPts(p,dx,dy,size){
+  const L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L, w=size*0.55;
+  return `${p.x},${p.y} ${p.x-ux*size-uy*w},${p.y-uy*size+ux*w} ${p.x-ux*size+uy*w},${p.y-uy*size-ux*w}`;
+}
+const r1=x=>Math.round(x*10)/10;
+function cloudSvg(p,id,end){
+  return `<g data-id="${id}" data-end="${end}"><path class="cloud" d="M${p.x-13},${p.y+6} a6,6 0 0 1 2,-11 a8,8 0 0 1 14,-3 a7,7 0 0 1 10,7 a5,5 0 0 1 -2,9 z"/></g>`;
+}
+
+function render(){
+  const out=[], labels=[];
+  for(const l of model.items.filter(i=>i.type==="link")){
+    const g=linkGeom(l); if(!g) continue;
+    const d=`M${r1(g.p0.x)},${r1(g.p0.y)} Q${r1(g.c.x)},${r1(g.c.y)} ${r1(g.p1.x)},${r1(g.p1.y)}`;
+    out.push(`<g class="lk${l.id===selId?" sel":""}" data-id="${l.id}"><path class="hit" d="${d}"/><path d="${d}"/><polygon points="${arrowPts(g.p1,g.p1.x-g.c.x,g.p1.y-g.c.y,9)}"/></g>`);
+  }
+  for(const f of model.items.filter(i=>i.type==="flow")){
+    const g=flowGeom(f), cls=`fl${f.id===selId?" sel":""}${errors[f.id]?" bad":""}`;
+    const tip={x:g.b.x,y:g.b.y}, base={x:g.b.x-g.ux*12,y:g.b.y-g.uy*12};
+    const horiz=Math.abs(g.ux)>=Math.abs(g.uy);
+    const above=horiz&&g.oy<0, left=!horiz&&g.ox<0;  // offset pairs put each label on its outer side
+    let lx=horiz?g.mid.x:(left?g.mid.x-18:g.mid.x+18), ly=horiz?(above?g.mid.y-18:g.mid.y+28):g.mid.y+4;
+    let anchor=horiz?"middle":left?"end":"start";
+    if(g.inline){ lx=g.mid.x+Math.abs(g.ux)*16+(horiz?0:8); ly=g.mid.y+4+(horiz?0:Math.abs(g.uy)*16); anchor="start"; }
+    const nx=-g.uy, ny=g.ux;
+    out.push(`<g class="${cls}">`);
+    if(!f.from) out.push(cloudSvg(g.a0,f.id,"from"));
+    if(!f.to) out.push(cloudSvg(g.b0,f.id,"to"));
+    out.push(`<g data-id="${f.id}">
+      <line class="pipe-o" x1="${r1(g.a.x)}" y1="${r1(g.a.y)}" x2="${r1(base.x)}" y2="${r1(base.y)}"/>
+      <line class="pipe-i" x1="${r1(g.a.x+(f.from?g.ux*2:0))}" y1="${r1(g.a.y+(f.from?g.uy*2:0))}" x2="${r1(base.x+g.ux*1)}" y2="${r1(base.y+g.uy*1)}"/>
+      <polygon class="head" points="${arrowPts(tip,g.ux,g.uy,14)}"/>
+      <circle class="valve" cx="${r1(g.mid.x)}" cy="${r1(g.mid.y)}" r="${VR}"/>
+      <polygon class="bow" points="${r1(g.mid.x-nx*7-g.ux*6)},${r1(g.mid.y-ny*7-g.uy*6)} ${r1(g.mid.x+nx*7-g.ux*6)},${r1(g.mid.y+ny*7-g.uy*6)} ${r1(g.mid.x-nx*7+g.ux*6)},${r1(g.mid.y-ny*7+g.uy*6)} ${r1(g.mid.x+nx*7+g.ux*6)},${r1(g.mid.y+ny*7+g.uy*6)}"/>
+    </g></g>`);
+    labels.push(`<text class="lbl halo" data-id="${f.id}" x="${r1(lx)}" y="${r1(ly)}" text-anchor="${anchor}">${esc(f.name)}</text>`);
+  }
+  for(const s of model.items.filter(i=>i.type==="stock")){
+    const cls=`st${s.id===selId?" sel":""}${errors[s.id]?" bad":""}`;
+    out.push(`<g class="${cls}" data-id="${s.id}"><rect x="${s.x-SW/2}" y="${s.y-SH/2}" width="${SW}" height="${SH}" rx="3"/>
+      <text class="lbl" x="${s.x}" y="${s.y-2}" text-anchor="middle" style="font-weight:700">${esc(s.name)}</text>
+      <text class="sub" x="${s.x}" y="${s.y+16}" text-anchor="middle">${esc(stockSub(s))}</text></g>`);
+  }
+  out.push(...labels);  // flux names go above every pipe and connector
+  for(const a of model.items.filter(i=>i.type==="aux")){
+    const cls=`ax${a.id===selId?" sel":""}${errors[a.id]?" bad":""}`;
+    out.push(`<g class="${cls}" data-id="${a.id}"><circle class="main" cx="${a.x}" cy="${a.y}" r="${AR}"/>
+      <text class="sub" x="${a.x}" y="${a.y+4}" text-anchor="middle">${esc(auxBadge(a))}</text>
+      <text class="lbl halo" x="${a.x}" y="${a.y+AR+16}" text-anchor="middle">${esc(a.name)}</text></g>`);
+  }
+  out.push(`<path id="tempLine" class="temp" d=""/>`);
+  svg.innerHTML=out.join("");
+  fitSvg();
+}
+function stockSub(s){
+  if(results&&results.series[s.id]){ const y=results.series[s.id]; return "end "+fmt(y[y.length-1]); }
+  return "start "+String(s.init||"?").slice(0,14);
+}
+function auxBadge(a){ const t=String(a.eq||"").trim(); return /^-?[\d.]+([eE][+-]?\d+)?$/.test(t)&&t.length<=6?t:"ƒ"; }
+function fitSvg(){
+  let w=900,h=560;
+  for(const it of model.items){
+    if(it.type==="stock"||it.type==="aux"){ w=Math.max(w,it.x+200); h=Math.max(h,it.y+160); }
+    if(it.type==="flow"){ w=Math.max(w,it.fx+200,it.tx+200); h=Math.max(h,it.fy+160,it.ty+160); }
+  }
+  svg.setAttribute("width",Math.ceil(w)); svg.setAttribute("height",Math.ceil(h));
+}
+
+/* ============================================================
+   Diagram interaction
+   ============================================================ */
+const HINTS={
+  select:"Click an item to edit it. Drag to move. Drag a cloud onto a pool to attach it.",
+  stock:"Click on the canvas to place a pool.",
+  flow:"Drag from a pool (or empty space, for a cloud) to another pool (or empty space).",
+  aux:"Click on the canvas to place a converter.",
+  link:"Drag from the quantity being used to the flux or converter whose equation uses it."
+};
+function setTool(t){
+  tool=t;
+  document.querySelectorAll(".tool").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tool===t?"true":"false"));
+  $("#hint").textContent=HINTS[t];
+  svg.style.cursor=t==="select"?"default":"crosshair";
+}
+function svgPt(e){ const r=svg.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; }
+function hitAt(e){
+  const el=document.elementFromPoint(e.clientX,e.clientY); const g=el&&el.closest&&el.closest("[data-id]");
+  return g&&svg.contains(g)?{it:get(g.dataset.id),end:g.dataset.end}:{it:null};
+}
+let drag=null;
+svg.addEventListener("pointerdown",e=>{
+  if(e.button!==0) return;
+  const p=svgPt(e), h=hitAt(e), it=h.it;
+  if(tool==="stock"||tool==="aux"){
+    const n={id:uid(),type:tool,name:uniqueName(tool==="stock"?"Pool":"Converter"),x:Math.round(p.x),y:Math.round(p.y),units:""};
+    if(tool==="stock"){ n.init="0"; n.nonneg=true; model.plot=(model.plot||[]).concat(n.id); } else n.eq="1";
+    model.items.push(n); setTool("select"); select(n.id,true); changed(); return;
+  }
+  if(tool==="flow"){ drag={kind:"newflow",from:it&&it.type==="stock"&&!h.end?it:null,p0:p}; svg.setPointerCapture(e.pointerId); return; }
+  if(tool==="link"){
+    if(it&&it.type!=="link"&&!h.end){ drag={kind:"newlink",src:it,p0:center(it)}; svg.setPointerCapture(e.pointerId); }
+    return;
+  }
+  if(!it){ select(null); return; }
+  select(it.id);
+  if(h.end) drag={kind:"cloud",f:it,end:h.end};
+  else if(it.type==="stock"||it.type==="aux") drag={kind:"move",it,dx:p.x-it.x,dy:p.y-it.y};
+  else if(it.type==="flow") drag={kind:"flow",it,last:p};
+  else if(it.type==="link") drag={kind:"bend",it};
+  drag.moved=false;
+  svg.setPointerCapture(e.pointerId);
+});
+svg.addEventListener("pointermove",e=>{
+  if(!drag) return;
+  const p=svgPt(e);
+  const temp=()=>document.getElementById("tempLine");
+  switch(drag.kind){
+    case "move": drag.it.x=Math.max(70,Math.round(p.x-drag.dx)); drag.it.y=Math.max(40,Math.round(p.y-drag.dy)); break;
+    case "cloud": if(drag.end==="from"){ drag.f.fx=Math.round(p.x); drag.f.fy=Math.round(p.y); } else { drag.f.tx=Math.round(p.x); drag.f.ty=Math.round(p.y); } break;
+    case "flow": { const dx=p.x-drag.last.x, dy=p.y-drag.last.y; drag.last=p;
+      if(!drag.it.from){ drag.it.fx+=dx; drag.it.fy+=dy; } if(!drag.it.to){ drag.it.tx+=dx; drag.it.ty+=dy; } break; }
+    case "bend": { const g=linkGeom(drag.it); const dx=g.B.x-g.A.x, dy=g.B.y-g.A.y, L=Math.hypot(dx,dy)||1;
+      const off=((p.x-(g.A.x+g.B.x)/2)*(-dy/L)+(p.y-(g.A.y+g.B.y)/2)*(dx/L)); drag.it.bend=Math.round(2*off); break; }
+    case "newflow": case "newlink": temp().setAttribute("d",`M${drag.p0.x},${drag.p0.y} L${p.x},${p.y}`); return;
+  }
+  drag.moved=true; render();
+});
+svg.addEventListener("pointerup",e=>{
+  if(!drag) return;
+  const d=drag; drag=null;
+  const p=svgPt(e), h=hitAt(e);
+  if(d.kind==="newflow"){
+    const target=h.it&&h.it.type==="stock"&&!h.end&&h.it!==d.from?h.it:null;
+    let p1=p; if(!target&&Math.hypot(p.x-d.p0.x,p.y-d.p0.y)<10) p1={x:d.p0.x+160,y:d.p0.y};
+    const f={id:uid(),type:"flow",name:uniqueName("Flux"),from:d.from?d.from.id:null,to:target?target.id:null,
+             fx:Math.round(d.p0.x),fy:Math.round(d.p0.y),tx:Math.round(p1.x),ty:Math.round(p1.y),eq:"",uniflow:true,units:""};
+    if(d.from&&!target&&Math.hypot(p.x-d.p0.x,p.y-d.p0.y)<10){ f.tx=d.from.x+SW/2+120; f.ty=d.from.y; }
+    model.items.push(f); setTool("select"); select(f.id,true); changed(); return;
+  }
+  if(d.kind==="newlink"){
+    render();
+    const T=h.it;
+    if(!T||T===d.src||h.end&&T.type!=="flow"){ return; }
+    if(T.type==="link"){ return; }
+    if(T.type==="stock"&&d.src.type!=="aux"){ flash("A connector into a pool can only bring a converter, for its starting value. Pools change only through fluxes."); return; }
+    if(model.items.some(l=>l.type==="link"&&l.from===d.src.id&&l.to===T.id)){ flash("That connector already exists."); return; }
+    const l={id:uid(),type:"link",from:d.src.id,to:T.id,bend:25};
+    model.items.push(l); select(T.id); changed(); return;
+  }
+  if(d.kind==="cloud"){
+    const T=h.it&&h.it.type==="stock"?h.it:null;
+    const other=d.end==="from"?d.f.to:d.f.from;
+    if(T&&T.id!==other){ d.f[d.end]=T.id; changed(); return; }  // attaching a pipe changes the model
+  }
+  if(d.moved){ save(); render(); }  // moving or bending only changes the drawing, so results stay visible
+});
+function flash(msg){ const hEl=$("#hint"); hEl.textContent=msg; clearTimeout(flash.t); flash.t=setTimeout(()=>hEl.textContent=HINTS[tool],4000); }
+
+function deleteItem(id){
+  const it=get(id); if(!it) return;
+  if(it.type==="stock"){
+    for(const f of model.items.filter(i=>i.type==="flow")){
+      if(f.from===id){ f.from=null; const g={x:it.x+SW/2+20,y:it.y}; f.fx=g.x; f.fy=g.y; }
+      if(f.to===id){ f.to=null; f.tx=it.x-SW/2-20; f.ty=it.y; }
+    }
+  }
+  model.items=model.items.filter(i=>i.id!==id&&!(i.type==="link"&&(i.from===id||i.to===id)));
+  model.plot=(model.plot||[]).filter(p=>p!==id);
+  select(null); changed();
+}
+
+document.addEventListener("keydown",e=>{
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+  if(e.key==="Escape"){ if(!$("#help").hidden){ $("#help").hidden=true; return; } setTool("select"); drag=null; render(); return; }
+  if(typing||e.metaKey||e.ctrlKey||e.altKey) return;
+  if((e.key==="Delete"||e.key==="Backspace")&&selId){ e.preventDefault(); deleteItem(selId); return; }
+  const map={v:"select",p:"stock",f:"flow",c:"aux",k:"link"}; const t=map[e.key.toLowerCase()];
+  if(t) setTool(t);
+});
+
+/* ============================================================
+   Inspector
+   ============================================================ */
+function select(id,focusName){
+  selId=id; render(); renderInsp();
+  if(focusName){ const n=$("#f-name"); if(n){ n.focus(); n.select(); } }
+}
+function inputsOf(it){ return model.items.filter(l=>l.type==="link"&&l.to===it.id).map(l=>get(l.from)).filter(Boolean); }
+function odeLine(s){
+  const ins=model.items.filter(f=>f.type==="flow"&&f.to===s.id).map(f=>eqName(f.name));
+  const outs=model.items.filter(f=>f.type==="flow"&&f.from===s.id).map(f=>eqName(f.name));
+  let rhs=ins.join(" + "); if(outs.length) rhs+=(rhs?" − ":"−")+outs.join(" − ");
+  return `d(${eqName(s.name)})/dt = ${rhs||"0"}`;
+}
+function renderInsp(){
+  const box=$("#insp"), it=selId&&get(selId);
+  if(!it){
+    box.innerHTML=`<h2>Getting started</h2>
+      <ol>
+        <li>Choose <b>Pool</b> and click the canvas for each pool of material.</li>
+        <li>Choose <b>Flux</b> and drag between pools, or from empty space, to move material.</li>
+        <li>Add <b>Converters</b> for parameters such as rate constants.</li>
+        <li>Choose <b>Connector</b> and drag from each quantity to the flux that uses it.</li>
+        <li>Click a flux and type its equation. Choose what to plot, predict the result, then press <b>Run</b>.</li>
+      </ol>
+      <p class="note">Open <b>Examples</b> to see three finished models. <b>How it works</b> explains the equation language and how the computer steps through time.</p>
+      <div class="field"><label for="f-notes">Model notes</label><textarea id="f-notes" style="font-family:var(--ui);min-height:90px" placeholder="Assumptions, sources for parameter values, your name…">${esc(model.notes||"")}</textarea></div>`;
+    $("#f-notes").oninput=e=>{ model.notes=e.target.value; save(); };
+    return;
+  }
+  const color=it.type==="stock"?"var(--stock)":it.type==="flow"?"var(--flow)":it.type==="aux"?"var(--aux)":"var(--link)";
+  let h=`<h2><span class="sw" style="background:${color}"></span>${TYPE_LABEL[it.type]}${it.type==="stock"?" (stock)":it.type==="flow"?" (flow)":""}</h2>`;
+  if(it.type==="link"){
+    const a=get(it.from), b=get(it.to);
+    h+=`<p>Carries the value of <b>${esc(a.name)}</b> into <b>${esc(b.name)}</b>, so ${esc(b.name)}'s ${b.type==="stock"?"initial value":"equation"} may use <code class="chip" style="background:var(--paper)">${esc(eqName(a.name))}</code>.</p>
+      <p class="note">Drag the connector to bend it.</p>`;
+  } else {
+    h+=`<div class="field"><label for="f-name">Name</label><input id="f-name" type="text" value="${esc(it.name)}"></div>`;
+    if(it.type==="stock"){
+      h+=`<div class="field"><label for="f-eq">Starting value</label><textarea id="f-eq" spellcheck="false">${esc(it.init||"")}</textarea></div>`;
+    } else {
+      h+=`<div class="field"><label for="f-eq">${it.type==="flow"?"Rate equation (amount per unit time)":"Value or equation"}</label><textarea id="f-eq" spellcheck="false" placeholder="${it.type==="flow"?"e.g. k * Soil_C":"e.g. 0.03"}">${esc(it.eq||"")}</textarea></div>`;
+      if(it.type==="aux") h+=`<div id="sliderBox"></div>`;
+      const ins=inputsOf(it);
+      h+=`<div class="field"><label>Connected inputs${ins.length?" (click to insert)":""}</label><div class="chips">${
+        ins.length?ins.map(s=>`<button class="chip" data-ins="${esc(eqName(s.name))}">${esc(eqName(s.name))}</button>`).join(""):`<span class="note">None yet. Use the Connector tool to bring in quantities this ${TYPE_LABEL[it.type].toLowerCase()} depends on.</span>`
+      }</div></div>`;
+    }
+    h+=`<div class="err" id="f-err"></div>`;
+    h+=`<div class="field"><label for="f-units">Units</label><input id="f-units" type="text" value="${esc(it.units||"")}" placeholder="${it.type==="stock"?"g C m-2":it.type==="flow"?"g C m-2 yr-1":"yr-1"}"></div>`;
+    if(it.type==="stock"){
+      h+=`<label class="row"><input type="checkbox" id="f-nonneg" ${it.nonneg!==false?"checked":""}> Non-negative (outflows stop when the pool is empty)</label>`;
+      h+=`<div class="field"><label>This pool changes by</label><div class="ode" id="f-ode">${esc(odeLine(it))}</div></div>`;
+    }
+    if(it.type==="flow"){
+      const a=it.from?get(it.from).name:"outside (cloud)", b=it.to?get(it.to).name:"outside (cloud)";
+      h+=`<label class="row"><input type="checkbox" id="f-uni" ${it.uniflow!==false?"checked":""}> One-way (negative rates count as zero)</label>`;
+      h+=`<p class="note">Moves material from <b>${esc(a)}</b> to <b>${esc(b)}</b>.</p>`;
+    }
+  }
+  h+=`<div class="row"><button class="danger" id="f-del">Delete ${TYPE_LABEL[it.type].toLowerCase()}</button></div>`;
+  box.innerHTML=h;
+
+  const on=(sel,ev,fn)=>{ const el=$(sel); if(el) el.addEventListener(ev,fn); };
+  on("#f-name","input",e=>{ it.name=e.target.value; render(); renderLegend(); renderEqs(); scheduleRun(); });
+  on("#f-eq","input",e=>{ if(it.type==="stock") it.init=e.target.value; else it.eq=e.target.value; syncSlider(it,false); save(); scheduleRun(); });
+  on("#f-units","input",e=>{ it.units=e.target.value; save(); renderLegend(); });
+  on("#f-nonneg","change",e=>{ it.nonneg=e.target.checked; changed(); });
+  on("#f-uni","change",e=>{ it.uniflow=e.target.checked; changed(); });
+  on("#f-del","click",()=>deleteItem(it.id));
+  box.querySelectorAll("[data-ins]").forEach(b=>b.addEventListener("click",()=>{
+    const ta=$("#f-eq"), s=ta.selectionStart??ta.value.length, en=ta.selectionEnd??s, ins=b.dataset.ins;
+    ta.value=ta.value.slice(0,s)+ins+ta.value.slice(en); ta.focus(); ta.selectionStart=ta.selectionEnd=s+ins.length;
+    ta.dispatchEvent(new Event("input"));
+  }));
+  if(it.type==="aux") syncSlider(it,true);
+  updateInspErr();
+}
+// A slider appears for converters whose equation is a plain number.
+function syncSlider(it,rebuild){
+  const box=$("#sliderBox"); if(!box) return;
+  const t=String(it.eq||"").trim(), num=/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)?parseFloat(t):null;
+  if(num===null){ box.innerHTML=""; return; }
+  if(it.smin==null||it.smax==null||num<it.smin||num>it.smax){
+    if(num===0){ it.smin=0; it.smax=1; } else if(num>0){ it.smin=0; it.smax=niceUp(num*2); } else { it.smin=-niceUp(-num*2); it.smax=0; }
+    rebuild=true;
+  }
+  if(rebuild||!$("#f-slider")){
+    box.innerHTML=`<div class="field"><label for="f-slider">Slide to change</label><div class="slider">
+      <input type="number" id="f-smin" value="${it.smin}" step="any" aria-label="Slider minimum">
+      <input type="range" id="f-slider" min="${it.smin}" max="${it.smax}" step="${(it.smax-it.smin)/400}" value="${num}">
+      <input type="number" id="f-smax" value="${it.smax}" step="any" aria-label="Slider maximum"></div></div>`;
+    $("#f-slider").oninput=e=>{ const v=+e.target.value; it.eq=String(+v.toPrecision(4)); $("#f-eq").value=it.eq; save(); render(); scheduleRun(); };
+    const lim=()=>{ const a=+$("#f-smin").value, b=+$("#f-smax").value; if(isFinite(a)&&isFinite(b)&&b>a){ it.smin=a; it.smax=b; const s=$("#f-slider"); s.min=a; s.max=b; s.step=(b-a)/400; save(); } };
+    $("#f-smin").onchange=lim; $("#f-smax").onchange=lim;
+  } else $("#f-slider").value=num;
+}
+function niceUp(x){ const m=10**Math.floor(Math.log10(x)), f=x/m; return (f<=1?1:f<=2?2:f<=5?5:10)*m; }
+function updateInspErr(){
+  const el=$("#f-err"); if(!el) return;
+  el.textContent=(errors[selId]||[]).join(" ");
+  const ode=$("#f-ode"); const it=get(selId); if(ode&&it) ode.textContent=odeLine(it);
+}
+
+/* ============================================================
+   Results: legend, graph, table, equations
+   ============================================================ */
+function fmt(v){
+  if(v==null||!isFinite(v)) return String(v);
+  const a=Math.abs(v);
+  if(a!==0&&(a>=1e6||a<1e-3)) return v.toExponential(2);
+  return (+v.toPrecision(4)).toLocaleString(undefined,{maximumFractionDigits:6});
+}
+// Constants are converters whose equation is a plain number; they go last in every list.
+function isConst(it){ return it.type==="aux"&&/^\s*-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/.test(String(it.eq||"")); }
+function groupedVars(){
+  const V=vars();
+  return [["Pools",V.filter(v=>v.type==="stock")],["Fluxes",V.filter(v=>v.type==="flow")],
+          ["Converters",V.filter(v=>v.type==="aux"&&!isConst(v))],["Constants",V.filter(isConst)]].filter(g=>g[1].length);
+}
+const orderedVars=()=>groupedVars().flatMap(g=>g[1]);
+function renderLegend(){
+  const L=$("#legend"); L.innerHTML="";
+  const addRow=(label,nodes)=>{ const g=document.createElement("span"); g.className="grp"; g.textContent=label;
+    const r=document.createElement("div"); r.className="lgrow"; r.append(...nodes); L.append(g,r); };
+  for(const [label,items] of groupedVars()){
+    addRow(label,items.map(it=>{
+      const on=(model.plot||[]).includes(it.id);
+      const b=document.createElement("button"); b.className="lg"; b.setAttribute("aria-pressed",on);
+      b.title=(it.units?it.units+". ":"")+(on?"Click to hide.":"Click to plot.");
+      let range="";
+      if(on&&$("#gScale").value==="each"&&results&&results.series[it.id]){ const [lo,hi]=extent([results.series[it.id]]); range=` <small>[${fmt(lo)} to ${fmt(hi)}]</small>`; }
+      b.innerHTML=`<span class="sw" style="background:${colorVar(it)}"></span>${esc(it.name)}${range}`;
+      b.onclick=()=>{ model.plot=on?model.plot.filter(x=>x!==it.id):[...(model.plot||[]),it.id]; save(); renderResults(); };
+      return b;
+    }));
+  }
+  if(pinned){ const n=document.createElement("small"); n.className="note"; n.textContent="Dashed lines show the pinned run."; const c=document.createElement("button"); c.textContent="Clear pinned run"; c.onclick=()=>{ pinned=null; renderResults(); }; addRow("Pinned",[n,c]); }
+}
+function extent(arrs){
+  let lo=Infinity,hi=-Infinity;
+  for(const a of arrs) for(let i=0;i<a.length;i++){ const x=a[i]; if(isFinite(x)){ if(x<lo) lo=x; if(x>hi) hi=x; } }
+  if(lo===Infinity) return [0,1];
+  return [lo,hi];
+}
+function niceTicks(lo,hi,n){
+  if(lo===hi){ const d=Math.abs(lo)*0.1||1; lo-=d; hi+=d; }
+  const raw=(hi-lo)/n, m=10**Math.floor(Math.log10(raw)), f=raw/m, step=(f<1.5?1:f<3?2:f<7?5:10)*m;
+  const a=Math.floor(lo/step+1e-9)*step, b=Math.ceil(hi/step-1e-9)*step, ticks=[];
+  for(let x=a;x<=b+step*1e-6;x+=step) ticks.push(+x.toPrecision(12));
+  return {lo:a,hi:b,ticks};
+}
+let hoverX=null;
+let exportPal=null;
+const LIGHT={"--ink":"#1b2629","--muted":"#5b6a6d","--grid":"#dde5e4","--rule":"#cbd6d5","--panel":"#ffffff",
+  "--ui":'"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif',"--mono":'"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace',
+  "--s1":"#1f5b88","--s2":"#c0562b","--s3":"#2e8540","--s4":"#8a3fa0","--s5":"#b8860b","--s6":"#0f8a8a","--s7":"#c2307a","--s8":"#5a6b2a"};
+function css(name){ if(exportPal) return exportPal[name]; return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// t = {g, W, H} draws into another canvas (the copied picture); without it, draws the on-screen graph.
+function drawGraph(t){
+  let g,W,H;
+  if(t){ ({g,W,H}=t); }
+  else{
+    const cv=$("#plot"), dpr=window.devicePixelRatio||1; W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  }
+  const ink=css("--ink"), muted=css("--muted"), grid=css("--grid"), rule=css("--rule");
+  g.font=`13px ${css("--ui")}`;
+  const ids=(model.plot||[]).filter(id=>get(id)&&results&&results.series[id]);
+  if(!results){ drawNotRun(g,W,H,ids,ink,muted,grid,rule); return; }
+  if(!ids.length){ g.fillStyle=muted; g.fillText("Click a name above to plot it.",20,30); return; }
+  const colorOf=id=>{ const v=colorVar(get(id)).slice(4,-1); return css(v); };
+  const mode=$("#gMode").value, each=$("#gScale").value==="each";
+  const M={l:each&&mode==="time"?24:70,r:20,t:14,b:44};
+  const pw=W-M.l-M.r, ph=H-M.t-M.b;
+  const T=results.t;
+
+  if(mode==="phase"){
+    if(ids.length<2){ g.fillStyle=muted; g.fillText("Turn on two quantities above: the first is the x axis, the second the y axis.",20,30); return; }
+    const [xi,yi]=ids, X=results.series[xi], Y=results.series[yi];
+    const PX=pinned&&pinned.series[xi], PY=pinned&&pinned.series[yi];
+    const xr=niceTicks(...extent([X,PX||[]]),6), yr=niceTicks(...extent([Y,PY||[]]),5);
+    axes(g,xr,yr,M,pw,ph,ink,muted,grid,rule,`${get(xi).name}${get(xi).units?" ("+get(xi).units+")":""}`,`${get(yi).name}`);
+    const sx=x=>M.l+(x-xr.lo)/(xr.hi-xr.lo)*pw, sy=y=>M.t+ph-(y-yr.lo)/(yr.hi-yr.lo)*ph;
+    const line=(A,B,col,dash)=>{ g.strokeStyle=col; g.lineWidth=2; g.setLineDash(dash?[6,4]:[]); g.beginPath();
+      for(let i=0;i<A.length;i++){ const x=sx(A[i]), y=sy(B[i]); i?g.lineTo(x,y):g.moveTo(x,y); } g.stroke(); g.setLineDash([]); };
+    if(PX&&PY) line(PX,PY,muted,true);
+    line(X,Y,colorOf(yi),false);
+    g.fillStyle=ink; g.beginPath(); g.arc(sx(X[0]),sy(Y[0]),4,0,7); g.fill();
+    g.fillText("start",sx(X[0])+7,sy(Y[0])-6);
+    return;
+  }
+
+  const xr=niceTicks(+model.settings.start,+model.settings.stop,8);
+  xr.lo=+model.settings.start; xr.hi=+model.settings.stop; xr.ticks=xr.ticks.filter(t=>t>=xr.lo-1e-9&&t<=xr.hi+1e-9);
+  const sx=t=>M.l+(t-xr.lo)/(xr.hi-xr.lo)*pw;
+  const rangeOf=id=>{ const arrs=[results.series[id]]; if(pinned&&pinned.series[id]) arrs.push(pinned.series[id]); return arrs; };
+  let yr=null;
+  if(!each){
+    let [lo,hi]=extent(ids.flatMap(rangeOf));
+    if(lo>=0&&lo<0.5*hi) lo=0;
+    yr=niceTicks(lo,hi,6);
+  }
+  axes(g,xr,each?null:yr,M,pw,ph,ink,muted,grid,rule,`Time${model.settings.units?" ("+model.settings.units+")":""}`,
+       each?"each line scaled to its own range":(ids.length===1&&get(ids[0]).units?get(ids[0]).units:""));
+  const scales={};
+  for(const id of ids){
+    let s=yr; if(each){ let [lo,hi]=extent(rangeOf(id)); s=niceTicks(lo,hi,5); }
+    scales[id]=y=>M.t+ph-(y-s.lo)/(s.hi-s.lo)*ph;
+  }
+  g.save(); g.beginPath(); g.rect(M.l,M.t-2,pw,ph+4); g.clip();
+  const trace=(TT,Y,sy,col,dash)=>{
+    g.strokeStyle=col; g.lineWidth=dash?1.6:2.2; g.setLineDash(dash?[6,4]:[]); g.globalAlpha=dash?0.75:1;
+    g.beginPath(); const step=Math.max(1,Math.floor(TT.length/(pw*2)));
+    for(let i=0;i<TT.length;i+=step){ const x=sx(TT[i]), y=sy(Y[i]); i?g.lineTo(x,y):g.moveTo(x,y); }
+    const k=TT.length-1; g.lineTo(sx(TT[k]),sy(Y[k])); g.stroke(); g.setLineDash([]); g.globalAlpha=1;
+  };
+  if(pinned) for(const id of ids) if(pinned.series[id]) trace(pinned.t,pinned.series[id],scales[id],colorOf(id),true);
+  for(const id of ids) trace(T,results.series[id],scales[id],colorOf(id),false);
+  g.restore();
+
+  if(!t&&hoverX!=null&&hoverX>=M.l&&hoverX<=M.l+pw){
+    const t=xr.lo+(hoverX-M.l)/pw*(xr.hi-xr.lo);
+    let k=Math.round((t-T[0])/results.dt); k=Math.max(0,Math.min(T.length-1,k));
+    const x=sx(T[k]);
+    g.strokeStyle=muted; g.lineWidth=1; g.beginPath(); g.moveTo(x,M.t); g.lineTo(x,M.t+ph); g.stroke();
+    const lines=[`t = ${fmt(T[k])}`].concat(ids.map(id=>`${get(id).name}: ${fmt(results.series[id][k])}`));
+    g.font=`13px ${css("--ui")}`;
+    const bw=Math.max(...lines.map(s=>g.measureText(s).width))+20, bh=lines.length*18+10;
+    const bx=x+12+bw>W-4?x-12-bw:x+12, by=M.t+8;
+    g.fillStyle=css("--panel"); g.strokeStyle=rule; g.fillRect(bx,by,bw,bh); g.strokeRect(bx,by,bw,bh);
+    lines.forEach((s,i)=>{
+      if(i){ g.fillStyle=colorOf(ids[i-1]); g.fillRect(bx+6,by+5+i*18+4,4,10); }
+      g.fillStyle=ink; g.fillText(s,bx+(i?14:8),by+18+i*18);
+      if(i){ g.fillStyle=colorOf(ids[i-1]); g.beginPath(); g.arc(x,scales[ids[i-1]](results.series[ids[i-1]][k]),3.5,0,7); g.fill(); }
+    });
+  }
+}
+// Before a run: empty axes and the predict-then-run prompt.
+function drawNotRun(g,W,H,ids,ink,muted,grid,rule){
+  const M={l:70,r:20,t:14,b:44}, pw=W-M.l-M.r, ph=H-M.t-M.b;
+  const t0=+model.settings.start, t1=+model.settings.stop;
+  if(isFinite(t0)&&isFinite(t1)&&t1>t0){
+    const xr=niceTicks(t0,t1,8); xr.lo=t0; xr.hi=t1; xr.ticks=xr.ticks.filter(t=>t>=t0-1e-9&&t<=t1+1e-9);
+    axes(g,xr,null,M,pw,ph,ink,muted,grid,rule,`Time${model.settings.units?" ("+model.settings.units+")":""}`,"");
+  }
+  const names=(model.plot||[]).filter(id=>get(id)).map(id=>get(id).name);  // ids is empty before a run
+  const lines=["Not run yet.",
+    names.length?`Will plot: ${names.join(", ")}.`:"Click names above to choose what to plot.",
+    "Sketch or write down what you expect each line to do, then press Run."];
+  g.textAlign="center"; g.fillStyle=ink; g.font=`bold 16px ${css("--ui")}`;
+  g.fillText(lines[0],M.l+pw/2,M.t+ph/2-26);
+  g.font=`14px ${css("--ui")}`; g.fillStyle=muted;
+  g.fillText(lines[1],M.l+pw/2,M.t+ph/2);
+  g.fillText(lines[2],M.l+pw/2,M.t+ph/2+22);
+  g.textAlign="left";
+}
+function axes(g,xr,yr,M,pw,ph,ink,muted,grid,rule,xlabel,ylabel){
+  g.lineWidth=1; g.textBaseline="middle"; g.font=`12px ${css("--mono")}`;
+  const sx=x=>M.l+(x-xr.lo)/(xr.hi-xr.lo)*pw;
+  for(const t of xr.ticks){ const x=Math.round(sx(t))+.5; g.strokeStyle=grid; g.beginPath(); g.moveTo(x,M.t); g.lineTo(x,M.t+ph); g.stroke();
+    g.fillStyle=muted; g.textAlign="center"; g.fillText(fmt(t),x,M.t+ph+14); }
+  if(yr){
+    const sy=y=>M.t+ph-(y-yr.lo)/(yr.hi-yr.lo)*ph;
+    for(const t of yr.ticks){ const y=Math.round(sy(t))+.5; g.strokeStyle=grid; g.beginPath(); g.moveTo(M.l,y); g.lineTo(M.l+pw,y); g.stroke();
+      g.fillStyle=muted; g.textAlign="right"; g.fillText(fmt(t),M.l-8,y); }
+  }
+  g.strokeStyle=rule; g.strokeRect(M.l+.5,M.t+.5,pw,ph); g.font=`13px ${css("--ui")}`;
+  g.fillStyle=ink; g.textAlign="center"; g.fillText(xlabel,M.l+pw/2,M.t+ph+34);
+  if(ylabel){ g.save(); g.translate(14,M.t+ph/2); g.rotate(-Math.PI/2); g.fillStyle=muted; g.fillText(ylabel,0,0); g.restore(); }
+  g.textAlign="left"; g.textBaseline="alphabetic";
+}
+function tableRows(){
+  const n=results.t.length, every=Math.max(1,Math.ceil((n-1)/500)), rows=[];
+  for(let k=0;k<n;k+=every) rows.push(k);
+  if(rows[rows.length-1]!==n-1) rows.push(n-1);
+  return rows;
+}
+function renderTable(){
+  const pane=$("#tablePane");
+  if(!results){ pane.innerHTML=`<p class="note" style="padding:10px">Run the model to fill the table.</p>`; return; }
+  const V=orderedVars().filter(v=>results.series[v.id]), rows=tableRows();
+  let h=`<table><thead><tr><th>Time</th>${V.map(v=>`<th>${esc(v.name)}</th>`).join("")}</tr></thead><tbody>`;
+  for(const k of rows) h+=`<tr><td>${fmt(results.t[k])}</td>${V.map(v=>`<td>${fmt(results.series[v.id][k])}</td>`).join("")}</tr>`;
+  pane.innerHTML=h+`</tbody></table>`+(rows.length<results.t.length?`<p class="note" style="padding:6px 10px">Showing ${rows.length} of ${results.t.length} time steps. The CSV has every step.</p>`:"");
+}
+function csvText(){
+  const V=orderedVars().filter(v=>results.series[v.id]);
+  const q=s=>/[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s;
+  const lines=[["time",...V.map(v=>q(v.name+(v.units?` (${v.units})`:"")))].join(",")];
+  for(let k=0;k<results.t.length;k++) lines.push([results.t[k],...V.map(v=>results.series[v.id][k])].map(x=>+(+x).toPrecision(8)).join(","));
+  return lines.join("\n");
+}
+function renderEqs(){
+  const L=[], V=vars();
+  const S=V.filter(v=>v.type==="stock"), F=V.filter(v=>v.type==="flow"), A=V.filter(v=>v.type==="aux"&&!isConst(v)), K=V.filter(isConst);
+  const u=v=>v.units?`    {${v.units}}`:"";
+  if(S.length){ L.push("POOLS (stocks): how each one changes"); for(const s of S){ L.push("  "+odeLine(s)); L.push(`      starting at ${eqName(s.name)}(${model.settings.start}) = ${s.init||"?"}${u(s)}${s.nonneg!==false?"    [non-negative]":""}`); } L.push(""); }
+  if(F.length){ L.push("FLUXES (flows): rate equations"); for(const f of F) L.push(`  ${eqName(f.name)} = ${f.eq||"?"}${u(f)}${f.uniflow!==false?"    [one-way]":""}`); L.push(""); }
+  if(A.length){ L.push("CONVERTERS (calculated)"); for(const a of A) L.push(`  ${eqName(a.name)} = ${a.eq||"?"}${u(a)}`); L.push(""); }
+  if(K.length){ L.push("CONSTANTS"); for(const a of K) L.push(`  ${eqName(a.name)} = ${a.eq}${u(a)}`); L.push(""); }
+  const st=model.settings;
+  L.push(`RUN: time ${st.start} to ${st.stop} ${st.units||""}, DT = ${st.dt}, ${st.method==="rk4"?"Runge–Kutta 4":"Euler"}`);
+  if(st.method!=="rk4"&&S.length) L.push(`  Euler step: pool(t + DT) = pool(t) + DT × (inflows − outflows)`);
+  $("#eqPane").textContent=L.join("\n");
+}
+function renderResults(){
+  renderLegend();
+  $("#plot").hidden=tab!=="graph"; $("#legend").hidden=tab!=="graph";
+  $("#tablePane").hidden=tab!=="table"; $("#eqPane").hidden=tab!=="eqs";
+  $("#graphOpts").hidden=tab!=="graph"; $("#tableOpts").hidden=tab!=="table";
+  if(tab==="graph") drawGraph(); else if(tab==="table") renderTable(); else renderEqs();
+}
+$("#plot").addEventListener("pointermove",e=>{ hoverX=e.offsetX; if(results) drawGraph(); });
+$("#plot").addEventListener("pointerleave",()=>{ hoverX=null; if(results) drawGraph(); });
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{ tab=b.dataset.tab; document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected",x===b)); renderResults(); });
+$("#gMode").onchange=renderResults; $("#gScale").onchange=renderResults;
+window.addEventListener("resize",()=>{ if(tab==="graph") drawGraph(); });
+if(window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{ render(); renderResults(); });
+
+/* ============================================================
+   Settings, persistence, files
+   ============================================================ */
+function changed(){ save(); render(); renderEqs(); scheduleRun(); if(!$("#autoRun").checked) renderLegend(); }
+function save(){ try{ localStorage.setItem("poolsFluxes.model",JSON.stringify(model)); }catch(e){} }
+function loadModel(m){
+  model=m; model.plot=model.plot||[]; model.settings=Object.assign(blankModel().settings,model.settings||{});
+  syncNextId(); selId=null; pinned=null; results=null; errors={};
+  $("#modelName").value=model.name||"";
+  $("#tStart").value=model.settings.start; $("#tStop").value=model.settings.stop; $("#tDt").value=model.settings.dt;
+  $("#method").value=model.settings.method; $("#tUnits").value=model.settings.units||"";
+  save(); render(); renderInsp(); renderEqs(); if($("#autoRun").checked) run(); else hideUntilRun();
+}
+const bindSetting=(sel,key,num)=>$(sel).addEventListener(num?"input":"change",e=>{ model.settings[key]=num?e.target.value:e.target.value; save(); renderEqs(); scheduleRun(); });
+bindSetting("#tStart","start",true); bindSetting("#tStop","stop",true); bindSetting("#tDt","dt",true); bindSetting("#method","method",false);
+$("#tUnits").addEventListener("input",e=>{ model.settings.units=e.target.value; save(); renderResults(); });
+$("#modelName").addEventListener("input",e=>{ model.name=e.target.value; save(); });
+$("#runBtn").onclick=run;
+$("#autoRun").onchange=e=>{ if(e.target.checked) run(); };
+$("#pinBtn").onclick=()=>{ if(results){ pinned={t:results.t.slice(),series:Object.fromEntries(Object.entries(results.series).map(([k,v])=>[k,v.slice()]))}; renderResults(); } };
+
+function askReplace(label,onYes){
+  if(!model.items.length){ onYes(); return; }
+  const bar=$("#confirmBar");
+  bar.innerHTML=`<span>${esc(label)} This replaces the model on screen. Save it first if you want to keep it.</span>`;
+  const y=document.createElement("button"); y.className="primary"; y.textContent="Replace";
+  const n=document.createElement("button"); n.textContent="Cancel";
+  y.onclick=()=>{ bar.hidden=true; onYes(); }; n.onclick=()=>{ bar.hidden=true; };
+  bar.append(y,n); bar.hidden=false; y.focus();
+}
+$("#examples").onchange=e=>{ const k=e.target.value; e.target.value=""; if(!k) return;
+  askReplace(`Open the example "${e.target.querySelector(`option[value=${k}]`).textContent}"?`,()=>loadModel(EXAMPLES[k]())); };
+$("#newBtn").onclick=()=>askReplace("Start a new, empty model?",()=>loadModel(blankModel()));
+$("#openBtn").onclick=()=>$("#fileIn").click();
+$("#fileIn").onchange=e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const obj=JSON.parse(r.result), m=obj.model||obj;
+      if(!Array.isArray(m.items)) throw 0;
+      askReplace(`Open "${f.name}"?`,()=>loadModel(m));
+    }catch(_){ setStatus(`"${f.name}" is not a Pools & Fluxes model file.`,true); }
+  };
+  r.readAsText(f);
+};
+let downloads=null;
+async function offerFile(filename,text){
+  if(downloads){
+    try{ await downloads.save({filename,data:text}); setStatus(`Saved ${filename}.`); }
+    catch(err){ if(err&&err.code!=="declined") setStatus(`Could not save the file (${err.code||"error"}).`,true); }
+    return;
+  }
+  // Opened as a plain local file: the browser saves it directly.
+  const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([text],{type:"application/octet-stream"})); a.download=filename;
+  document.body.append(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500);
+}
+// The graph as a picture: title, plot, and a legend underneath.
+function graphCanvas(){
+  const ids=(model.plot||[]).filter(id=>get(id)&&results&&results.series[id]);
+  if(!results||!ids.length) return null;
+  const mode=$("#gMode").value, each=$("#gScale").value==="each";
+  if(mode==="phase"&&ids.length<2) return null;
+  exportPal=LIGHT;
+  try{
+    const W=1200, PH=560, S=2, pad=24, font=`15px ${LIGHT["--ui"]}`;
+    const meas=document.createElement("canvas").getContext("2d"); meas.font=font;
+    const col=it=>LIGHT[colorVar(it).slice(4,-1)], lab=it=>it.name+(it.units?` (${it.units})`:"");
+    let entries;
+    if(mode==="phase") entries=[{txt:`${lab(get(ids[1]))} against ${lab(get(ids[0]))}`,color:col(get(ids[1]))}];
+    else entries=ids.map(id=>{ const it=get(id); let txt=lab(it);
+      if(each){ const [lo,hi]=extent([results.series[id]]); txt+=`, scaled ${fmt(lo)} to ${fmt(hi)}`; }
+      return {txt,color:col(it)}; });
+    if(pinned) entries.push({txt:"dashed lines: pinned run",color:LIGHT["--muted"],dash:true});
+    let x=pad; const rows=[[]];
+    for(const e of entries){ const w=38+meas.measureText(e.txt).width+28;
+      if(x+w>W-pad&&rows[rows.length-1].length){ rows.push([]); x=pad; } e.x=x; rows[rows.length-1].push(e); x+=w; }
+    const titleH=46, legH=rows.length*26+18, H=titleH+PH+legH;
+    const cv=document.createElement("canvas"); cv.width=W*S; cv.height=H*S;
+    const g=cv.getContext("2d"); g.scale(S,S);
+    g.fillStyle="#ffffff"; g.fillRect(0,0,W,H);
+    g.fillStyle=LIGHT["--ink"]; g.font=`bold 19px ${LIGHT["--ui"]}`; g.fillText(model.name||"Model",pad,31);
+    g.save(); g.translate(0,titleH); drawGraph({g,W,H:PH}); g.restore();
+    g.font=font; g.textBaseline="middle";
+    rows.forEach((r,ri)=>r.forEach(e=>{
+      const y=titleH+PH+18+ri*26;
+      g.strokeStyle=e.color; g.lineWidth=3; g.setLineDash(e.dash?[6,4]:[]);
+      g.beginPath(); g.moveTo(e.x,y); g.lineTo(e.x+30,y); g.stroke(); g.setLineDash([]);
+      g.fillStyle=LIGHT["--ink"]; g.fillText(e.txt,e.x+38,y);
+    }));
+    return cv;
+  } finally { exportPal=null; }
+}
+$("#copyGraph").onclick=async()=>{
+  const cv=graphCanvas();
+  if(!cv){ setStatus(results?"Plot something first: click a name in the list above the graph.":"Press Run first; there is no graph to copy yet.",true); return; }
+  const blob=new Promise(r=>cv.toBlob(r,"image/png"));
+  try{
+    await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
+    setStatus("Copied the graph as a picture. Paste it into a document or slide.");
+  }catch(_){
+    setStatus("This browser would not copy a picture, so the graph is offered as a PNG file instead.");
+    offerFile(safeName()+"_graph.png",await blob);
+  }
+};
+const modelJSON=()=>JSON.stringify({format:"pools-and-fluxes",version:1,model},null,1);
+$("#copyModel").onclick=async()=>{
+  try{ await navigator.clipboard.writeText(modelJSON()); setStatus("Copied the model as text. Paste it on this page (outside a text box) to open it, or into a file to keep it."); }
+  catch(_){ setStatus("This browser blocked copying. Use Save instead.",true); }
+};
+document.addEventListener("paste",e=>{
+  if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  const txt=e.clipboardData&&e.clipboardData.getData("text"); if(!txt) return;
+  let m; try{ const o=JSON.parse(txt); m=o.model||o; }catch(_){ return; }
+  if(!m||!Array.isArray(m.items)) return;
+  e.preventDefault(); askReplace(`Open the pasted model "${m.name||"Untitled"}"?`,()=>loadModel(m));
+});
+const safeName=()=>(model.name||"model").replace(/[^\w\- ]+/g,"").trim().replace(/\s+/g,"_")||"model";
+$("#saveBtn").onclick=()=>offerFile(safeName()+".json",modelJSON());
+$("#saveCsv").onclick=()=>{ if(results) offerFile(safeName()+"_results.csv",csvText()); };
+$("#copyCsv").onclick=async()=>{
+  if(!results) return;
+  try{ await navigator.clipboard.writeText(csvText()); setStatus("Copied the results as CSV. Paste into a spreadsheet."); }
+  catch(_){ setStatus("This browser blocked copying. Use Save CSV instead.",true); }
+};
+$("#helpBtn").onclick=()=>{ $("#help").hidden=false; $("#helpClose").focus(); };
+$("#helpClose").onclick=()=>{ $("#help").hidden=true; };
+$("#help").addEventListener("click",e=>{ if(e.target.id==="help") $("#help").hidden=true; });
+document.querySelectorAll(".tool").forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+
+(async()=>{ try{ if(window.claude&&window.claude.use) downloads=await window.claude.use("downloads"); }catch(_){ downloads=null; } })();
+
+// Start: last model from this browser, else the plant-soil example.
+let saved=null;
+try{ saved=JSON.parse(localStorage.getItem("poolsFluxes.model")); }catch(e){}
+setTool("select");
+loadModel(saved&&Array.isArray(saved.items)?saved:EXAMPLES.plantsoil());
+</script>
